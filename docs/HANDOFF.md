@@ -1,5 +1,8 @@
 # Handoff: Armrest v1.0.0 (Microsoft Store release)
 
+> **Newer: `plan.md` section 14 (2026-10-26) is the place to resume from.** It has the current state, the
+> ordered to-do list, the full rename plan and the pricing and payments plan. This file is kept for history.
+
 Written 2026-10-25 for the next agent. Read this first, then `CLAUDE.md`, `AGENT_PROTOCOL.md` and `plan.md` sections 12
 (binding release rules) and 13 (the v1.0.0 plan, with status in 13.9 and decisions in 13.10).
 

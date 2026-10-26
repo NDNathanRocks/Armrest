@@ -619,7 +619,7 @@ and `Browser.setWindowBounds` (v0.2.1 fullscreen fix) on the TV's headed Edge.
 
 ---
 
-## 13. v1.0.0 plan: a paid Microsoft Store product (approved 2026-10-24; building, see 13.9)
+## 13. v1.0.0 plan: a paid Microsoft Store product (approved 2026-10-24; building, see 13.9 and section 14)
 
 Request: make the app good enough to sell in the Microsoft Store; production and business ready, with fresh ideas.
 Decisions already made by the user (2026-10-24): **paid app with a free trial** handled by the Store; **rename** (no
@@ -765,7 +765,8 @@ customers' licences.
 | 5G PC Control Center | done (`pc-daemon/control/`). A window in the daemon's Qt app, opened from the Start menu (a second launch now opens it, with a fallback to the QR toggle), the tray ("Open Armrest...") and the settings shortcut. Pages: **Status** (relay, TV browser, AI, voice, licence and phones, with fix buttons: open Edge, reconnect, set up AI, buy); **Phones** (list, remove, pairing QR); **Settings** (the everyday `config.env` options as validated controls, saved atomically keeping comments, then the app restarts itself); **Licence** (days left, Buy, key box); **Help** (support, a scrubbed diagnostics file, privacy, terms, licences, delete my cloud data). A **welcome wizard** on a fresh install covers the TV screen, streaming sign-in, the AI choice (Gemini key or local download), crash-report and update opt-ins, and pairing with live "paired" detection; 0.x users (an older room) are not shown it. Checked by offscreen pytest-qt tests, renders of every page, and a dry-run daemon opening each page through `/api/ui/open` (loopback only). Not done: rename phones and owner/guest roles (5H), and the "try the remote on this PC" loopback mode (5H) |
 | 5H Phone app | partly done: landing page, Apps row, guest phones, several TVs, trial banner, legal links. Left: English + French, accessibility pass with axe, guest passes, hide settings toggles for guests, "try it on this PC" (docs/HANDOFF.md) |
 | 5K Legal + Store kit | partly done: privacy, terms, get and support drafts as site pages, LICENSE. Left: Store listing, reviewer notes, screenshot script |
-| 5E, 5J, 5L | not started (docs/HANDOFF.md) |
+| 5E | done 2026-10-26: Cloudflare Pages only, Vercel removed (section 14) |
+| 5J, 5L | not started (section 14.2) |
 
 **5A result: go.** A Store-channel build packed with `build_msix.ps1`, test-signed and installed with `Add-AppxPackage`
 (no admin once the test certificate is trusted). Inside the package: the daemon, the supervisor and the TV overlay start;
@@ -848,3 +849,105 @@ account's free tier or credits still cover API Gateway. A deleted stack costs no
 | Me | 5G PC Control Center |
 | Me | 5E once the address is chosen |
 | Me, then 5H-5L | Phone features, reliability, packaging tests (MSIX update, WACK, clean PC), legal drafts, Critic |
+
+## 14. Where we are and what's next (2026-10-26) — START HERE
+
+This section replaces `docs/HANDOFF.md` as the place to resume from. Sections 12 (release rules, binding) and 13
+(the 1.0.0 plan) still apply.
+
+### 14.1 Current state
+| Thing | State |
+|---|---|
+| PC app | **0.4.0** committed, built in `installer\dist`, upgrade-tested 20/20 from published 0.2.0. The user pushes, tags and publishes the GitHub release (notes: `docs/RELEASE_NOTES_0.4.0.md`). Last published release before it: 0.2.0 |
+| Licensing | 0.x direct builds are a **free preview** (`licensing.is_preview`): no trial, no key. The 14-day trial (`TRIAL_DAYS`) starts on the first run of 1.0 |
+| Phone app | **Cloudflare Pages only**, project `armrest-app`, https://armrest-app.pages.dev. Vercel was removed 2026-10-26. Deploy: `docs/DEVELOPING.md` > *Deploy the phone app*. Redeploy after every UI commit |
+| QR codes | Always `armrest-app.pages.dev`. `brand.qr_base_url` maps old Vercel addresses still in a `config.env` |
+| Relay | AWS account 332130072624, stack `couch-jarvis`, us-east-2, `wss://ltqv0kbaoc.execute-api.us-east-2.amazonaws.com/prod`. **Production still runs the pre-5D relay** (no `room.delete`, no per-IP limits): deploy with the user's OK (`sam build`, `sam deploy --no-execute-changeset`, review, execute) |
+| Docs | `README.md` (public), `docs/COMMANDS.md`, `docs/INSTALL.md` (settings table), `docs/DEVELOPING.md`, legal drafts in `docs/*.md` rendered by `scripts/legal_pages.py` |
+| Checks | 1,029 Python tests, 209 web tests, 26 real-Edge tests, ruff, mypy --strict, eslint, tsc: all green |
+
+0.4.0 added: commands follow the tab Edge shows (`/json/list` order; Playwright fakes focus, so page-side checks
+can't tell), custom keyboard-shortcut favourites, playback speed / exit fullscreen / duplicate tab, seek fixes
+(no remount mid-drag, the real player, the Netflix API), touchpad acceleration, volume %, the Apps row from 0.4.0.
+
+### 14.2 To-do, in order
+| # | Who | Task |
+|---|---|---|
+| 1 | User | Push, tag `v0.4.0`, publish the release with `CouchJarvis-Setup.exe` + the portable zip. Re-pair phones once (new address) |
+| 2 | User | Test 0.4.0 on the TV with a real phone: tab following, custom shortcuts, speed, exit fullscreen, seek on real sites, touchpad feel |
+| 3 | Me (OK needed) | Deploy the relay (5D code) so *Delete my cloud data* works |
+| 4 | Me | **Full rename to Armrest** (14.3) |
+| 5 | User + me | **Pricing and payments** (14.4) |
+| 6 | Me | 5H leftovers: English + French (`t()` + a test that both dictionaries match), accessibility pass with axe, guest passes that expire after 24 h, "try the remote on this PC" (loopback pairing, for Store reviewers) |
+| 7 | Me | 5J packaging: version 1.0.0, exe version info, MSIX build with the Partner Center identity, MSIX→MSIX update test, Inno→Store migration, WACK, a clean PC in Windows Sandbox. Remove the test certificate `CN=CouchJarvisDev` afterwards (13.10) |
+| 8 | Me | 5L Critic: `pytest -m ""`, web, lint, types, licence + secret scans, WACK, both upgrade tests, every screen at phone and TV size |
+| 9 | User | Trademark search for "Armrest" (USPTO class 9/42, CIPO); Partner Center account and name reservation; `STORE_PRODUCT_ID` in `brand.py`; back up `%USERPROFILE%\.armrest\licence-signing-key.pem`; raise the Lambda concurrency quota to 1,000; Sentry DSN (optional); fill the `[BRACKETED]` legal placeholders and pick a support email |
+
+### 14.3 Rename CouchJarvis → Armrest everywhere (without breaking existing installs)
+Goal: no "CouchJarvis"/"couch-jarvis" left that a user or developer sees (exe, folders, installer, repo, Task
+Manager, firewall, startup), while every existing install updates in place with its settings, pairings and TV
+sign-ins. Ship it as one release (0.5.0, or fold it into 1.0.0), gated by the 20/20 upgrade test plus the new checks
+below.
+
+| Identifier | Today | Plan | Why it is safe |
+|---|---|---|---|
+| Inno `AppId` | `{7B1E3C52-…}` | **Never change** (rule 12) | It's how an update finds the old install |
+| Install folder | `{autopf}\CouchJarvis` | New installs: `{autopf}\Armrest`. Updates keep the old folder (Inno `UsePreviousAppDir`) or move it in `[Code]` | Inno reuses the previous folder for the same AppId |
+| Installer file | `CouchJarvis-Setup.exe` | `Armrest-Setup.exe` | Only the download name. Update the release-notes template |
+| Exe | `CouchJarvis.exe` | `Armrest.exe` (PyInstaller spec renamed `armrest.spec`) | The installer stops **both** names before copying (`StopCouchJarvis`, `CouchJarvisRunning`) and deletes the old exe. The update check, MSIX manifest, firewall rule and `test_installer_upgrade.ps1` use the new name |
+| Single-instance mutex | `Local\CouchJarvisDaemon` | Hold **both** names for one or two releases | An old copy still running sees the new one, and the reverse |
+| Data | `%APPDATA%\CouchJarvis`, `%LOCALAPPDATA%\CouchJarvis` (logs, telemetry, **Edge TV profile**) | `…\Armrest`. On the first run of the new version, if the new folder is missing and the old one exists, **move it** (a rename on the same drive is atomic; copy and verify if that fails). Leave a `MOVED_TO_ARMREST.txt` behind. `datafiles.py` records the move in `schema.json` | The Edge profile is large and holds sign-ins: a move keeps them and doesn't double the disk use. Edge must be closed first (the watchdog starts it after the move) |
+| Packaged (MSIX) data | the package folder | Unchanged: it is per-package already | — |
+| Settings prefix | `CJ_*` | Accept `ARMREST_*` **and** `CJ_*` (pydantic `AliasChoices`). New `config.env` files write `ARMREST_*`; old files keep working forever | No file is ever rewritten |
+| Startup | Run key / task `CouchJarvis` | The installer removes the old entries and adds `Armrest` | Done in `[Code]`, covered by the upgrade test |
+| Firewall rule | named after CouchJarvis | Remove the old one, add `Armrest` (direct build); the MSIX declares its own | — |
+| Start-menu shortcuts | already `Armrest` | — | Done in 0.4.0 |
+| JWT issuer | `couch-jarvis` (relay `infra/lambdas/common/auth.py`, LAN `lan_auth.py`) | Issue `armrest`; **accept both** when verifying until the oldest token (180 days) has expired, then drop `couch-jarvis`. Needs a relay deploy | Phones hold tokens with the old issuer |
+| Relay stack and tables | stack `couch-jarvis` and its tables | **Keep.** Invisible to users. Renaming means a new stack, a data migration and a new URL in every `config.env`. Revisit only with a custom relay domain | — |
+| Phone storage | IndexedDB `couch-jarvis`, `cj.*` keys | Rename to `armrest` / `armrest.*` with a read-old-then-write-new migration in `storage.ts`, `favorites.ts`, `tvs.ts`, `TouchPad.tsx`, `recents`, mic mode | Same origin, so the old keys are readable |
+| Voice style id | `jarvis` | Keep the stored id and show "Butler" (done). Optional: also accept `butler` | — |
+| npm package / pyproject name | `couch-jarvis-remote`, `couch-jarvis` | `armrest-remote`, `armrest` | Build-only |
+| GitHub repo | `NDNathanRocks/couch-jarvis` | The user renames it to `armrest` in GitHub settings. GitHub redirects the web, git and API URLs, so installed copies' update checks keep working. Then update `RELEASES_API` (`update_check.py`), `RELEASES_URL` (`App.tsx`), the README and `git remote`. **Never create a new repo named couch-jarvis afterwards**: that breaks the redirect | GitHub keeps redirects for renamed repos |
+| Local folder | `Projects\couch-jarvis` | Rename after the repo. The Claude memory folder is keyed by this path: copy the memory files to the new project's memory folder | — |
+| Docs and tests | many mentions | Sweep last; add a test that fails on any new `CouchJarvis` outside an allow-list of migration code | Keeps it from creeping back |
+
+Upgrade-test additions: install 0.2.0 and 0.4.0, then the renamed build over each. Check that `Armrest.exe` runs and
+no `CouchJarvis.exe` is left; that the data was moved (`room.json` hash unchanged, Edge profile sign-ins kept, the old
+folder holds only the note); that old phone tokens still work; and that both mutex names block a second launch.
+
+### 14.4 Pricing and payments
+**Decision (user, 2026-10-26):** a **2-week free trial, then probably a one-time purchase.** The 14-day trial
+already exists (`TRIAL_DAYS = 14`) and starts with 1.0; 0.x stays free.
+
+Proposed price: **4.99–7.99 USD one-time** (13.2: the relay costs about 0.03 USD per home per month, so a one-time
+price covers years). Preview (0.x) users get a free key (`scripts/license_keys.py issue`).
+
+How the money comes in. There are two channels, and the app already supports both (5F):
+
+| | Microsoft Store (main) | Direct download (website) |
+|---|---|---|
+| Who sells | Microsoft. Price, trial length and regions are set in Partner Center | A **merchant of record**: Lemon Squeezy or Paddle. They take cards and PayPal, handle sales tax/VAT worldwide, refunds and receipts. Using Stripe directly would leave the sales-tax work to us, so not Stripe |
+| Fee | The Store commission (15% for apps when last checked; confirm in Partner Center). Non-game apps may be allowed to use their own payment system inside the Store: check the current policy before relying on it | About 5% + 0.50 USD per sale (confirm current pricing) |
+| Trial | The Store's own trial (`Windows.Services.Store`, built) | Our 14-day trial from the first run (built) |
+| Licence | The Store says active/trial/expired (built) | An **Ed25519 key** checked offline (built: `ARMREST1.` keys, `CJ_LICENSE_KEY` or the key box in the Armrest window) |
+| Buy button | Opens the Store page (`STORE_PRODUCT_ID`) | Opens `armrest-app.pages.dev/get.html` |
+| Setup cost | Individual developer registration (free since 2025; confirm) | Free to sign up; a percentage per sale |
+
+**Key delivery for direct sales (to build):**
+1. The buyer pays on the Lemon Squeezy (or Paddle) checkout, linked from `get.html`.
+2. The merchant sends a signed **webhook** (`order_created`) to a small **Cloudflare Worker** (free plan, e.g.
+   `armrest-license`). The Worker checks the webhook signature, signs an `ARMREST1.` key with the Ed25519 private key
+   (stored as a Worker **secret**, never in the repo) and emails it (Cloudflare Email Sending, or the merchant's
+   custom receipt). Keys are derived from the order id, so a retried webhook gives the same key.
+3. A **Restore my key** page (email + order number → the same key again). Optional: a refund webhook adds the key to
+   a revocation list the app downloads now and then (keys stay offline-first).
+4. Tests: Worker unit tests with a fake webhook; an end-to-end run in the merchant's test mode; the app accepts the
+   emailed key.
+
+**To decide (user):** the final price; Store only at first, or Store + direct; Lemon Squeezy or Paddle (both need
+identity and payout details; Lemon Squeezy is simpler for one person); whether preview users get keys automatically
+(an "I used the preview" form) or on request; the refund window (14 days is common).
+
+**Me, once decided:** the Worker and its tests; the `get.html` buy page with real links; a "Restore key" page; the
+price text in `docs/STORE_LISTING.md`; the price and refund sections of `docs/TERMS.md`; and the Partner Center trial
+settings written down in `docs/STORE_LISTING.md`.
