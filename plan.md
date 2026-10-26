@@ -951,3 +951,39 @@ identity and payout details; Lemon Squeezy is simpler for one person); whether p
 **Me, once decided:** the Worker and its tests; the `get.html` buy page with real links; a "Restore key" page; the
 price text in `docs/STORE_LISTING.md`; the price and refund sections of `docs/TERMS.md`; and the Partner Center trial
 settings written down in `docs/STORE_LISTING.md`.
+
+### 14.5 Open decisions (the user's; to action later)
+| Decision | Options / recommendation | Blocks |
+|---|---|---|
+| Price | One-time, 4.99–7.99 USD suggested | 14.4, Store listing, terms |
+| Where to sell first | Store only at first (simplest), or Store + direct website | Whether to build the key Worker now |
+| Merchant for direct sales | Lemon Squeezy (simpler for one person) or Paddle | The Worker, `get.html` |
+| Keys for preview (0.x) users | Automatic via an "I used the preview" form, or on request | Free-key flow |
+| Refund window | 14 days is common | Terms, merchant settings |
+| When to rename | A 0.5.0 release on its own, or folded into 1.0.0 | 14.3 |
+| GitHub repo rename | The user renames `couch-jarvis` → `armrest` in GitHub settings, then the code follows (14.3) | 14.3 |
+| Relay deploy | OK to deploy the 5D relay code to production | *Delete my cloud data*, the JWT issuer change |
+| Legal placeholders | Publisher name, support email, `[BRACKETED]` items in `docs/*.md` | Store submission |
+
+Facts to check before acting on 14.4 (from memory, not verified): the Store commission, whether non-game Store apps
+may use their own payment system, the free individual Partner Center registration, and the merchant fees.
+
+### 14.6 Handoff checklist for the next session
+1. Read `CLAUDE.md`, `AGENT_PROTOCOL.md`, section 12 (binding release rules), then 14.1–14.5.
+2. `git log --oneline -10` and `git status`: everything up to the section-14 commits is committed; check whether
+   `v0.4.0` was pushed and released (the user does that).
+3. Run the checks before changing anything (`docs/DEVELOPING.md` > *Checks*): quick pytest (~50 s), web vitest, ruff,
+   mypy, tsc, eslint.
+4. Pick the next item from 14.2. For 14.4, start only with the user's answers to 14.5.
+5. **Hard rules (they caused real problems before):**
+   - Ask before any push, tag, production deploy or AWS change (the user pushes and releases themselves).
+   - Never delete or rewrite `%APPDATA%\CouchJarvis` or the Edge TV profile. Back up `room.json` before installer
+     tests (its SHA-256 starts `36F07BF8`).
+   - Installer tests only via `scripts/test_installer_upgrade.ps1`. Afterwards check `Get-Process _unins*,unins000`
+     and kill any leftover uninstaller: a hidden "delete settings?" prompt once wiped the user's data.
+   - Never use a plain Inno `MsgBox` (use `SuppressibleMsgBox`). Never change the Inno `AppId`.
+   - New phone controls must hide on older PCs (`daemon_version`, `web-remote/src/utils/version.ts`).
+   - Redeploy the phone app to Cloudflare after UI commits, and check the live bundle.
+   - On this PC: edit files with the Edit/Write tools. Bash heredocs break on apostrophes and backslashes, so put
+     larger scripts in a scratch file. Some files are CRLF: keep their line endings.
+6. When work lands, update 14.1–14.5 (and `docs/RELEASE_NOTES_<version>.md` for a release).
