@@ -864,7 +864,7 @@ This section replaces `docs/HANDOFF.md` as the place to resume from. Sections 12
 | QR codes | Always `armrest-app.pages.dev`. `brand.qr_base_url` maps old Vercel addresses still in a `config.env` |
 | Relay | AWS account 332130072624, stack `couch-jarvis`, us-east-2, `wss://ltqv0kbaoc.execute-api.us-east-2.amazonaws.com/prod`. **Production still runs the pre-5D relay** (no `room.delete`, no per-IP limits, and it rejects tokens with the `armrest` issuer). The code waiting to deploy = 5D + accept both issuers (user, 2026-10-26: one combined deploy, ask at the change-set step): `sam build`, `sam deploy --no-execute-changeset`, show the user, execute on their OK |
 | Docs | `README.md` (public), `docs/COMMANDS.md`, `docs/INSTALL.md` (settings table), `docs/DEVELOPING.md`, legal drafts in `docs/*.md` rendered by `scripts/legal_pages.py` |
-| Checks | 1,039 Python tests, 209 web tests, 26 real-Edge tests, ruff, mypy --strict, eslint, tsc: all green |
+| Checks | `pytest -m ""` 1,079 passed (incl. real Edge + phone e2e; `test_youtube_cc_button_is_toggled_to_the_wanted_state` is flaky, passes on rerun), 209 web tests, ruff, mypy --strict, eslint, tsc: all green |
 
 0.4.0 added: commands follow the tab Edge shows (`/json/list` order; Playwright fakes focus, so page-side checks
 can't tell), custom keyboard-shortcut favourites, playback speed / exit fullscreen / duplicate tab, seek fixes

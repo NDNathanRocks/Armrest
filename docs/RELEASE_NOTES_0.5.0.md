@@ -2,7 +2,7 @@
 
 The rename is finished. Since 0.4.0 the app looked like Armrest, but on your PC it still ran as `CouchJarvis.exe`
 from CouchJarvis folders. Now the program, its folders, the installer and the startup entry are all Armrest. There
-are no new features.
+are no new features. One fix: the touchpad's Slow / Normal / Fast buttons are now big enough to tap easily.
 
 **Free preview:** 0.x versions stay free with no trial and no licence key.
 
@@ -31,12 +31,13 @@ a later start, once the browser has been closed.
 ## Files
 | File | SHA-256 |
 |---|---|
-| `Armrest-Setup.exe` (recommended) | `a8698f1f06e24429a58e9dd0f88df4030c442886202ea3e4353e9414e5b4a064` |
-| `Armrest-portable-0.5.0.zip` | `42bc79fba57bb7855f9e395f3428ebcdf9ad175a4d5859eb59bfa8b0a0c8912e` |
+| `Armrest-Setup.exe` (recommended) | `abcba6c09c4bfbd1c9540172f0b10145ca6ee1ffe0cee38f8794a5eb4fccdd95` |
+| `Armrest-portable-0.5.0.zip` | `e7905ac24cdbb25ffd86b160eba4279aa8ac3b140e734da7778675f6383d12be` |
 
 ## Checked before release
-Automated: 1,039 Python tests, 209 phone-app tests, linting, type checks, and the licence and secret scans. A new
-test fails if the old name appears outside the migration code.
+Automated: the full release suite (1,079 Python tests, including the real-Edge and end-to-end phone tests), 209
+phone-app tests, linting, type checks, and the licence and secret scans. A new test fails if the old name appears
+outside the migration code.
 
 Upgrade test, from the published 0.4.0 and from 0.2.0: 33 of 33 checks passed each time, on a sandboxed copy of an
 old install. They cover:
