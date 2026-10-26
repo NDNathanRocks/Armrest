@@ -2,7 +2,7 @@
 
 Guests get media, volume, favourites and voice commands; not the touchpad or keyboard, the QR
 reset, the PC's voice and browser settings, or deleting saved pages. The PC enforces this (the
-relay never needs to know). Stored in %APPDATA%\\CouchJarvis\\roles.json.
+relay never needs to know). Stored in %APPDATA%\\Armrest\\roles.json.
 """
 
 from __future__ import annotations

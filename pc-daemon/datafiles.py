@@ -1,6 +1,6 @@
 """The user's data files: safe writes, and a version record for future migrations (plan 5I).
 
-The version lives in its own file (%APPDATA%\\CouchJarvis\\schema.json), not inside each data
+The version lives in its own file (%APPDATA%\\Armrest\\schema.json), not inside each data
 file. An older app, which a user may reinstall over a newer one, reads its files with strict
 models; a new key inside room.json would break it, a separate file never does.
 

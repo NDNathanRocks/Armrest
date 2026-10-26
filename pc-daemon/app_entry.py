@@ -1,10 +1,11 @@
-"""Entrypoint of the packaged app (CouchJarvis.exe).
+"""Entrypoint of the packaged app (Armrest.exe).
 
-    CouchJarvis.exe                 supervisor: one instance, restarts the daemon if it dies
-    CouchJarvis.exe --worker ...    the daemon itself (what the supervisor launches)
+    Armrest.exe                 supervisor: one instance, restarts the daemon if it dies
+    Armrest.exe --worker ...    the daemon itself (what the supervisor launches)
 
-The supervisor has no window of its own. It keeps %LOCALAPPDATA%\\CouchJarvis\\logs, writes a
-default %APPDATA%\\CouchJarvis\\config.env on first run, and always shows the TV overlay (the
+The supervisor has no window of its own. It moves the data out of the pre-0.5.0 CouchJarvis
+folders (app_dirs), keeps %LOCALAPPDATA%\\Armrest\\logs, writes a
+default %APPDATA%\\Armrest\\config.env on first run, and always shows the TV overlay (the
 QR that pairs a phone). Pairing links and secrets are never written to the log.
 """
 
@@ -19,9 +20,13 @@ import sys
 import time
 from pathlib import Path
 
+import app_dirs
 from config import resource_root, user_config_file
 
-MUTEX_NAME = "Local\\CouchJarvisDaemon"
+MUTEX_NAME = "Local\\ArmrestDaemon"
+# Also held until every install runs 0.5.0+: a CouchJarvis (<= 0.4) copy checks only this name,
+# and the new app must see an old copy still running too.
+LEGACY_MUTEX_NAME = "Local\\CouchJarvisDaemon"
 FIRST_DELAY_S = 2
 MAX_DELAY_S = 60
 HEALTHY_RUN_S = 60
@@ -30,14 +35,13 @@ QUIET_LOGGERS = ("httpx", "httpx2", "httpcore")
 
 _TEMPLATE = (
     "# Armrest settings. Lines starting with # are ignored; restart the app after editing.\n"
-    "# CJ_RELAY_WS_URL=wss://...        cloud relay\n"
-    "# CJ_PWA_BASE_URL=https://...      where the phone app is hosted\n"
+    "# ARMREST_RELAY_WS_URL=wss://...   cloud relay\n"
+    "# ARMREST_PWA_BASE_URL=https://... where the phone app is hosted\n"
 )
 
 
 def app_log_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
-    return Path(base) / "CouchJarvis" / "logs"
+    return app_dirs.local_dir() / "logs"
 
 
 def ensure_user_config(target: Path, defaults: Path) -> bool:
@@ -109,8 +113,11 @@ def _already_running() -> bool:
     if sys.platform != "win32":
         return False
     kernel32 = ctypes.windll.kernel32
-    kernel32.CreateMutexW(None, False, MUTEX_NAME)  # kept open until the process exits
-    return bool(kernel32.GetLastError() == 183)  # ERROR_ALREADY_EXISTS
+    running = False
+    for name in (MUTEX_NAME, LEGACY_MUTEX_NAME):
+        kernel32.CreateMutexW(None, False, name)  # kept open until the process exits
+        running = running or kernel32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
+    return running
 
 
 def toggle_running_qr(port: int | None = None) -> bool | None:
@@ -160,9 +167,18 @@ def run_worker(argv: list[str]) -> int:
 
 
 def run_supervisor(argv: list[str]) -> int:
+    from build_info import is_packaged
+
+    running = _already_running()
+    # Only the first copy moves the folders (before any file is opened): a running copy may be
+    # using them.
+    moved = {} if running else app_dirs.move_legacy_folders(packaged=is_packaged())
     configure_logging("app")
-    log = logging.getLogger("couch-jarvis.app")
-    if _already_running():
+    log = logging.getLogger("armrest.app")
+    for folder, outcome in moved.items():
+        if outcome != "nothing":
+            log.info("CouchJarvis -> Armrest data move (%s): %s", folder, outcome)
+    if running:
         # Opening the app again (taskbar, Start menu) opens its window; an app that cannot
         # (no window, an older version mid-update) flips the pairing QR on the TV instead.
         if open_running_ui():
@@ -210,7 +226,7 @@ def open_settings(target: Path, defaults: Path) -> int:
 def main() -> int:
     args = sys.argv[1:]
     if args[:1] == ["--worker"]:
-        return run_worker(args[1:])
+        return run_worker(args[1:])  # the supervisor moved the folders before starting it
     if args[:1] == ["--open-settings"]:
         return open_settings(user_config_file(), resource_root() / "installer" / "defaults.env")
     return run_supervisor(args)

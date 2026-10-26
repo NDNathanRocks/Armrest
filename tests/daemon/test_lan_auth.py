@@ -98,6 +98,9 @@ def test_tokens_from_other_rooms_keys_expiry_and_alg_none_are_rejected(store: Ro
     )
     assert lan.verify_token(jwt.encode({**good, "exp": 999}, KEY, algorithm="HS256")) is None
     assert lan.verify_token(jwt.encode({**good, "iss": "evil"}, KEY, algorithm="HS256")) is None
+    # the issuer after the rename is accepted already (phones may hold either for 180 days)
+    renamed = jwt.encode({**good, "iss": "armrest"}, KEY, algorithm="HS256")
+    assert lan.verify_token(renamed) == "dev-1"
     assert lan.verify_token(jwt.encode(good, key=None, algorithm="none")) is None  # type: ignore[arg-type]
     assert lan.verify_token("not-a-jwt") is None
 

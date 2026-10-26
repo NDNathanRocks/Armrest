@@ -58,7 +58,7 @@ def test_builds_never_ship_edge_tts() -> None:
 def test_the_tv_browser_profile_inside_a_package(tmp_path: Path) -> None:
     local = tmp_path / "Local"
     default = local / "CouchJarvis" / "edge-profile"
-    own = local / "Packages" / "Fam_123" / "LocalCache" / "Local" / "CouchJarvis" / "edge-profile"
+    own = local / "Packages" / "Fam_123" / "LocalCache" / "Local" / "Armrest" / "edge-profile"
     assert build_info.edge_profile_dir(default, None, local) == default  # not packaged
     assert build_info.edge_profile_dir(default, "Fam_123", local) == own  # a new Store install
     default.mkdir(parents=True)  # the direct installer was here first: keep its sign-ins

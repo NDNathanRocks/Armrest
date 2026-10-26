@@ -181,12 +181,12 @@ _WINDOWS_SCRIPT = """
 Add-Type -AssemblyName System.Speech
 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
 try {
-  $culture = New-Object System.Globalization.CultureInfo($env:CJ_TTS_CULTURE)
-  $gender = [System.Enum]::Parse([System.Speech.Synthesis.VoiceGender], $env:CJ_TTS_GENDER)
+  $culture = New-Object System.Globalization.CultureInfo($env:ARMREST_TTS_CULTURE)
+  $gender = [System.Enum]::Parse([System.Speech.Synthesis.VoiceGender], $env:ARMREST_TTS_GENDER)
   $s.SelectVoiceByHints($gender, 'NotSet', 0, $culture)
 } catch {}
-$s.SetOutputToWaveFile($env:CJ_TTS_OUT)
-$s.Speak($env:CJ_TTS_TEXT)
+$s.SetOutputToWaveFile($env:ARMREST_TTS_OUT)
+$s.Speak($env:ARMREST_TTS_TEXT)
 $s.Dispose()
 """
 
@@ -214,10 +214,10 @@ class WindowsProvider:
         os.close(fd)
         env = {
             **os.environ,
-            "CJ_TTS_TEXT": text,
-            "CJ_TTS_OUT": out,
-            "CJ_TTS_GENDER": voice.windows_gender,
-            "CJ_TTS_CULTURE": voice.windows_culture,
+            "ARMREST_TTS_TEXT": text,
+            "ARMREST_TTS_OUT": out,
+            "ARMREST_TTS_GENDER": voice.windows_gender,
+            "ARMREST_TTS_CULTURE": voice.windows_culture,
         }
         try:
             proc = await asyncio.create_subprocess_exec(

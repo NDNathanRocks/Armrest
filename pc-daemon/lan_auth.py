@@ -19,7 +19,10 @@ import jwt
 from contracts import PairGrantedPayload
 from room import RoomStore, sha256_hex
 
-ISSUER = "couch-jarvis"
+ISSUER = "couch-jarvis"  # still issued: CouchJarvis (<= 0.4) PCs accept only this one
+# Accepted when checking. Issue "armrest" once no PC older than 0.5.0 is left; drop "couch-jarvis"
+# 180 days (TOKEN_TTL_S) after that.
+ACCEPTED_ISSUERS = (ISSUER, "armrest")
 TOKEN_TTL_S = 180 * 24 * 3600
 LOCKOUT_FAILURES = 10
 LOCKOUT_WINDOW_S = 60.0
@@ -56,7 +59,7 @@ class LanAuth:
                 token,
                 ident.room_key,
                 algorithms=["HS256"],
-                issuer=ISSUER,
+                issuer=ACCEPTED_ISSUERS,
                 options={
                     "require": ["exp", "sub", "rid", "iss"],
                     "verify_exp": False,

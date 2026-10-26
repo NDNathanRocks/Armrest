@@ -40,7 +40,7 @@ from build_info import (
 )
 from cloud_relay_client import CloudRelayClient
 from command_queue import CommandRequest
-from config import Settings, get_settings, init_dpi_awareness, resource_root
+from config import Settings, env_value, get_settings, init_dpi_awareness, resource_root
 from contracts import Bookmark, BrowserState, TimerInfo, VoiceState, new_id
 from control.health import Health
 from event_bus import EventBus
@@ -69,7 +69,7 @@ from watchdog import EdgeWatchdog, make_edge_launcher, make_http_probe
 if TYPE_CHECKING:
     from control.center import ControlCenter
 
-log = logging.getLogger("couch-jarvis")
+log = logging.getLogger("armrest")
 PWA_DIST = resource_root() / "web-remote" / "dist"
 
 
@@ -130,7 +130,7 @@ async def prepare_brain(settings: Settings, health: Health | None = None) -> Non
     else:
         log.warning(
             "brain %s (%s): free-form commands will not work until you run Set up AI brain "
-            "or add CJ_GEMINI_API_KEY",
+            "or add ARMREST_GEMINI_API_KEY",
             status.state,
             status.detail,
         )
@@ -203,7 +203,9 @@ def build_runtime(settings: Settings, *, dry_run: bool) -> Runtime:
         from executors.vision_grounding import MssScreen
 
         profile = settings.edge_profile_dir
-        if "edge_profile_dir" not in settings.model_fields_set:  # CJ_EDGE_PROFILE_DIR always wins
+        if (
+            "edge_profile_dir" not in settings.model_fields_set
+        ):  # ARMREST_EDGE_PROFILE_DIR always wins
             local = Path(os.environ.get("LOCALAPPDATA") or Path.home())
             profile = edge_profile_dir(profile, package_family_name(), local)
         watchdog = EdgeWatchdog(
@@ -288,7 +290,7 @@ def start_licensing(rt: Runtime, settings: Settings) -> asyncio.Task[None]:
     )
     key = settings.license_key.get_secret_value() if settings.license_key else None
     if key and not manager.uses_store and manager.enter_key(key) is None:
-        log.warning("CJ_LICENSE_KEY is not a valid %s licence key", APP_NAME)
+        log.warning("ARMREST_LICENSE_KEY is not a valid %s licence key", APP_NAME)
     rt.service.licence = manager
     service = rt.service
 
@@ -313,9 +315,9 @@ async def amain(args: argparse.Namespace) -> None:
     rt = build_runtime(settings, dry_run=args.dry_run)
     if args.dry_run and rt.room_store is None:
         # --dry-run has no real identity, but pairing, LAN auth and the HUD QR all need one. Use a
-        # throwaway store (or the file named by CJ_ROOM_FILE, so scripts can know the secret) and
-        # a local room key, since there is no relay to hand one out.
-        explicit = os.environ.get("CJ_ROOM_FILE")
+        # throwaway store (or the file named by ARMREST_ROOM_FILE, so scripts can know the
+        # secret) and a local room key, since there is no relay to hand one out.
+        explicit = env_value("ROOM_FILE")
         path = (
             Path(explicit)
             if explicit
@@ -403,7 +405,7 @@ async def amain(args: argparse.Namespace) -> None:
         rt.cloud = cloud
         background.append(asyncio.create_task(cloud.run(), name="cloud-relay"))
     elif not args.dry_run:
-        log.warning("CJ_RELAY_WS_URL is not set: running in LAN-only mode")
+        log.warning("ARMREST_RELAY_WS_URL is not set: running in LAN-only mode")
     if rt.room_store is not None and sys.stdout is not None and sys.stdout.isatty():
         # The URL embeds the room secret: show it on the console, never write it to log files.
         print(

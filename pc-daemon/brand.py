@@ -1,8 +1,8 @@
 """The product name people see. Change it here (and in web-remote/src/brand.ts).
 
-Internal names stay ``CouchJarvis`` on purpose: the exe, the data folders under %APPDATA% and
-%LOCALAPPDATA%, the installer AppId, the ``CJ_`` settings and the wire ids. Renaming those would
-strand existing installs, settings and paired phones.
+The app was called CouchJarvis until 0.5.0. What still carries that name does so to keep existing
+installs working: the installer AppId (never changes), the data move (app_dirs), the ``CJ_``
+settings still read (config.py), the device-token issuer (lan_auth.py) and the relay stack.
 """
 
 from __future__ import annotations

@@ -14,7 +14,10 @@ from typing import Any
 
 import jwt
 
-ISSUER = "couch-jarvis"
+ISSUER = "couch-jarvis"  # still issued: CouchJarvis (<= 0.4) PCs accept only this one
+# Accepted when checking. Issue "armrest" once no PC older than 0.5.0 is left; drop "couch-jarvis"
+# 180 days (TOKEN_TTL_S) after that.
+ACCEPTED_ISSUERS = (ISSUER, "armrest")
 TOKEN_TTL_S = 180 * 24 * 3600
 REFRESH_WHEN_LEFT_S = 90 * 24 * 3600
 
@@ -52,7 +55,7 @@ def verify_device_token(
             token,
             room_key,
             algorithms=["HS256"],
-            issuer=ISSUER,
+            issuer=ACCEPTED_ISSUERS,
             options={
                 "require": ["exp", "sub", "rid", "iss"],
                 # time is checked below against the caller-supplied clock

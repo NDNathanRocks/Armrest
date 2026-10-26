@@ -139,7 +139,7 @@ class RoomState(_Model):
     devices: list[DevicePresence] = Field(default_factory=list)
     daemon_version: str = ""  # the PC app version: the phone hides controls an older PC lacks
     update_available: str | None = None  # newer released version, if the daily check found one
-    remote_input: bool = True  # touchpad/keyboard allowed (CJ_REMOTE_INPUT on the PC)
+    remote_input: bool = True  # touchpad/keyboard allowed (ARMREST_REMOTE_INPUT on the PC)
     voice: VoiceState = Field(default_factory=VoiceState)
     browser: BrowserState = Field(default_factory=BrowserState)
     bookmarks: list[Bookmark] = Field(default_factory=list, max_length=100)

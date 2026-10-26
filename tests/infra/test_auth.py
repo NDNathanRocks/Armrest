@@ -63,6 +63,17 @@ def test_alg_none_and_wrong_issuer_rejected() -> None:
     assert auth.verify_device_token(key, "room-aaaaaaaa", none_token, NOW) is None
     bad_iss = jwt.encode({**claims, "iss": "evil"}, key, algorithm="HS256")
     assert auth.verify_device_token(key, "room-aaaaaaaa", bad_iss, NOW) is None
+    for iss in ("couch-jarvis", "armrest"):  # before and after the rename
+        token = jwt.encode({**claims, "iss": iss}, key, algorithm="HS256")
+        assert auth.verify_device_token(key, "room-aaaaaaaa", token, NOW) is not None
+    # still issued under the old name: CouchJarvis (<= 0.4) PCs check tokens offline
+    assert (
+        jwt.decode(
+            auth.mint_device_token(key, "room-aaaaaaaa", "dev-1", NOW)[0],
+            options={"verify_signature": False},
+        )["iss"]
+        == "couch-jarvis"
+    )
     missing_sub = jwt.encode(
         {k: v for k, v in claims.items() if k != "sub"}, key, algorithm="HS256"
     )

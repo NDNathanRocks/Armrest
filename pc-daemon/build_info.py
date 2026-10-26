@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from app_dirs import APP_DIR
 from config import resource_root
 
 Channel = Literal["dev", "direct", "store"]
@@ -91,7 +92,7 @@ def package_family_name() -> str | None:
 def edge_profile_dir(default: Path, family: str | None, local_appdata: Path) -> Path:
     """Where the TV browser keeps its profile.
 
-    Inside an MSIX, Windows redirects a *new* ``%LOCALAPPDATA%\\CouchJarvis`` to the package's
+    Inside an MSIX, Windows redirects a *new* ``%LOCALAPPDATA%\\Armrest`` to the package's
     private copy, but Edge's helper processes run outside the package and would write half the
     profile to the real folder (seen in the 5A spike). Naming the package's folder directly gives
     every Edge process the same files. A profile left by the direct installer (a real folder, so
@@ -99,7 +100,7 @@ def edge_profile_dir(default: Path, family: str | None, local_appdata: Path) -> 
     """
     if family is None:
         return default
-    own = local_appdata / "Packages" / family / "LocalCache" / "Local" / "CouchJarvis"
+    own = local_appdata / "Packages" / family / "LocalCache" / "Local" / APP_DIR
     own /= "edge-profile"
     if own.exists() or not default.exists():
         return own

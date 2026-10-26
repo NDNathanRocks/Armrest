@@ -22,10 +22,10 @@ from licensing import Licence  # noqa: E402
 # ----------------------------------------------------------------------------- settings file
 
 ORIGINAL = """# Armrest settings. Lines starting with # are ignored.
-CJ_RELAY_WS_URL=wss://relay.example/prod
-# CJ_GEMINI_API_KEY=...      free key
-CJ_REMOTE_INPUT=true
-CJ_SOMETHING_ELSE=keep me
+ARMREST_RELAY_WS_URL=wss://relay.example/prod
+# ARMREST_GEMINI_API_KEY=...      free key
+ARMREST_REMOTE_INPUT=true
+ARMREST_SOMETHING_ELSE=keep me
 """
 
 
@@ -35,52 +35,79 @@ def test_saving_changes_only_the_settings_that_changed(tmp_path: Path) -> None:
     changed = settings_file.save(
         path,
         {
-            "CJ_REMOTE_INPUT": "false",
-            "CJ_GEMINI_API_KEY": "AIzaSyExample123",
-            "CJ_SUBTITLE_LANG": "en",
+            "ARMREST_REMOTE_INPUT": "false",
+            "ARMREST_GEMINI_API_KEY": "AIzaSyExample123",
+            "ARMREST_SUBTITLE_LANG": "en",
         },
     )
-    assert sorted(changed) == ["CJ_GEMINI_API_KEY", "CJ_REMOTE_INPUT"]  # "en" is the default
+    assert sorted(changed) == [
+        "ARMREST_GEMINI_API_KEY",
+        "ARMREST_REMOTE_INPUT",
+    ]  # "en" is the default
     text = path.read_text(encoding="utf-8")
-    assert "# CJ_GEMINI_API_KEY=...      free key" in text  # comments survive
-    assert "CJ_RELAY_WS_URL=wss://relay.example/prod" in text
-    assert "CJ_SOMETHING_ELSE=keep me" in text
-    assert "CJ_REMOTE_INPUT=false" in text and "CJ_REMOTE_INPUT=true" not in text
-    assert settings_file.read_values(path)["CJ_GEMINI_API_KEY"] == "AIzaSyExample123"
+    assert "# ARMREST_GEMINI_API_KEY=...      free key" in text  # comments survive
+    assert "ARMREST_RELAY_WS_URL=wss://relay.example/prod" in text
+    assert "ARMREST_SOMETHING_ELSE=keep me" in text
+    assert "ARMREST_REMOTE_INPUT=false" in text and "ARMREST_REMOTE_INPUT=true" not in text
+    assert settings_file.read_values(path)["ARMREST_GEMINI_API_KEY"] == "AIzaSyExample123"
     assert not list(tmp_path.glob(".config-*"))  # no temp file left behind
 
 
 def test_emptying_a_setting_removes_it_and_duplicates_collapse(tmp_path: Path) -> None:
     path = tmp_path / "config.env"
     path.write_text(
-        "CJ_GROQ_API_KEY=gsk_old12345\nCJ_GROQ_API_KEY=gsk_new12345\n", encoding="utf-8"
+        "ARMREST_GROQ_API_KEY=gsk_old12345\nARMREST_GROQ_API_KEY=gsk_new12345\n", encoding="utf-8"
     )
-    assert settings_file.current(path)["CJ_GROQ_API_KEY"] == "gsk_new12345"  # last wins
-    assert settings_file.save(path, {"CJ_GROQ_API_KEY": ""}) == ["CJ_GROQ_API_KEY"]
-    assert "CJ_GROQ_API_KEY" not in path.read_text(encoding="utf-8")
+    assert settings_file.current(path)["ARMREST_GROQ_API_KEY"] == "gsk_new12345"  # last wins
+    assert settings_file.save(path, {"ARMREST_GROQ_API_KEY": ""}) == ["ARMREST_GROQ_API_KEY"]
+    assert "ARMREST_GROQ_API_KEY" not in path.read_text(encoding="utf-8")
+
+
+def test_a_file_from_before_the_rename_keeps_its_names(tmp_path: Path) -> None:
+    path = tmp_path / "config.env"
+    path.write_text("CJ_REMOTE_INPUT=true\nCJ_SUBTITLE_LANG=fr\nCJ_RELAY_WS_URL=wss://r\n", "utf-8")
+    assert settings_file.current(path)["ARMREST_SUBTITLE_LANG"] == "fr"
+    settings_file.save(path, {"ARMREST_REMOTE_INPUT": "false", "ARMREST_UPDATE_CHECK": "false"})
+    lines = path.read_text(encoding="utf-8").splitlines()
+    # a changed CJ_ line keeps its name (an older app installed over this one still reads it);
+    # a setting the file never had is written with the new name
+    assert lines == [
+        "CJ_REMOTE_INPUT=false",
+        "CJ_SUBTITLE_LANG=fr",
+        "CJ_RELAY_WS_URL=wss://r",
+        "ARMREST_UPDATE_CHECK=false",
+    ]
+
+
+def test_the_armrest_name_wins_over_the_old_one(tmp_path: Path) -> None:
+    path = tmp_path / "config.env"
+    path.write_text("ARMREST_SUBTITLE_LANG=de\nCJ_SUBTITLE_LANG=fr\n", encoding="utf-8")
+    assert settings_file.current(path)["ARMREST_SUBTITLE_LANG"] == "de"  # as the app reads it
+    settings_file.save(path, {"ARMREST_SUBTITLE_LANG": "es"})
+    assert path.read_text(encoding="utf-8") == "ARMREST_SUBTITLE_LANG=es\n"  # one line left
 
 
 def test_values_with_spaces_are_quoted_and_read_back(tmp_path: Path) -> None:
     path = tmp_path / "config.env"
-    settings_file.save(path, {"CJ_ELEVENLABS_API_KEY": "abc#def123456"})
+    settings_file.save(path, {"ARMREST_ELEVENLABS_API_KEY": "abc#def123456"})
     assert '"abc#def123456"' in path.read_text(encoding="utf-8")
-    assert settings_file.read_values(path)["CJ_ELEVENLABS_API_KEY"] == "abc#def123456"
+    assert settings_file.read_values(path)["ARMREST_ELEVENLABS_API_KEY"] == "abc#def123456"
 
 
 @pytest.mark.parametrize(
     ("name", "value", "ok"),
     [
-        ("CJ_REMOTE_INPUT", "true", True),
-        ("CJ_REMOTE_INPUT", "yes", False),
-        ("CJ_STT_DEVICE", "cuda", True),
-        ("CJ_STT_DEVICE", "tpu", False),
-        ("CJ_HUD_BADGE_HIDE_S", "30", True),
-        ("CJ_HUD_BADGE_HIDE_S", "-1", False),
-        ("CJ_HUD_BADGE_HIDE_S", "soon", False),
-        ("CJ_SUBTITLE_LANG", "fr", True),
-        ("CJ_SUBTITLE_LANG", "French", False),
-        ("CJ_GEMINI_API_KEY", "AIza12345678", True),
-        ("CJ_GEMINI_API_KEY", "two words", False),
+        ("ARMREST_REMOTE_INPUT", "true", True),
+        ("ARMREST_REMOTE_INPUT", "yes", False),
+        ("ARMREST_STT_DEVICE", "cuda", True),
+        ("ARMREST_STT_DEVICE", "tpu", False),
+        ("ARMREST_HUD_BADGE_HIDE_S", "30", True),
+        ("ARMREST_HUD_BADGE_HIDE_S", "-1", False),
+        ("ARMREST_HUD_BADGE_HIDE_S", "soon", False),
+        ("ARMREST_SUBTITLE_LANG", "fr", True),
+        ("ARMREST_SUBTITLE_LANG", "French", False),
+        ("ARMREST_GEMINI_API_KEY", "AIza12345678", True),
+        ("ARMREST_GEMINI_API_KEY", "two words", False),
     ],
 )
 def test_each_setting_is_validated(name: str, value: str, ok: bool) -> None:
@@ -90,9 +117,11 @@ def test_each_setting_is_validated(name: str, value: str, ok: bool) -> None:
 def test_bad_values_and_unknown_settings_are_never_written(tmp_path: Path) -> None:
     path = tmp_path / "config.env"
     with pytest.raises(ValueError):
-        settings_file.save(path, {"CJ_REMOTE_INPUT": "maybe"})
+        settings_file.save(path, {"ARMREST_REMOTE_INPUT": "maybe"})
     with pytest.raises(KeyError):
-        settings_file.save(path, {"CJ_RELAY_WS_URL": "wss://evil"})  # not offered in the window
+        settings_file.save(
+            path, {"ARMREST_RELAY_WS_URL": "wss://evil"}
+        )  # not offered in the window
     assert not path.exists()
 
 
@@ -159,13 +188,16 @@ def test_diagnostics_carry_no_secrets_or_private_details(tmp_path: Path) -> None
         channel="store",
         packaged=True,
         status=[Row("TV browser", "good", "Microsoft Edge is ready.")],
-        settings={"CJ_GEMINI_API_KEY": "AIzaSySecretSecret123", "CJ_REMOTE_INPUT": "true"},
+        settings={
+            "ARMREST_GEMINI_API_KEY": "AIzaSySecretSecret123",
+            "ARMREST_REMOTE_INPUT": "true",
+        },
         logs={"daemon": diagnostics.tail(log)},
         secrets=["AIzaSySecretSecret123"],
     )
     for leaked in ("AIzaSySecretSecret123", "netflix", "Jane"):
         assert leaked not in text, leaked
-    assert "CJ_GEMINI_API_KEY: set" in text and "CJ_REMOTE_INPUT: true" in text
+    assert "ARMREST_GEMINI_API_KEY: set" in text and "ARMREST_REMOTE_INPUT: true" in text
     assert "[good] TV browser" in text and "version 1.0.0 (store, Store package)" in text
 
 
@@ -312,18 +344,21 @@ def test_settings_page_saves_the_form_and_restarts(qapp, tmp_path: Path) -> None
 
     backend = FakeBackend(tmp_path)
     window = ControlWindow(backend)
-    remote = window.inputs["CJ_REMOTE_INPUT"]
+    remote = window.inputs["ARMREST_REMOTE_INPUT"]
     assert isinstance(remote, QCheckBox) and remote.isChecked()
     remote.setChecked(False)
-    lang = window.inputs["CJ_SUBTITLE_LANG"]
+    lang = window.inputs["ARMREST_SUBTITLE_LANG"]
     assert isinstance(lang, QLineEdit)
     lang.setText("French")
     assert window.save_settings(restart=False) == []  # a bad value blocks the save
-    assert window.errors["CJ_SUBTITLE_LANG"].text() and not backend.config_path.exists()
+    assert window.errors["ARMREST_SUBTITLE_LANG"].text() and not backend.config_path.exists()
     lang.setText("fr")
-    assert sorted(window.save_settings(restart=False)) == ["CJ_REMOTE_INPUT", "CJ_SUBTITLE_LANG"]
+    assert sorted(window.save_settings(restart=False)) == [
+        "ARMREST_REMOTE_INPUT",
+        "ARMREST_SUBTITLE_LANG",
+    ]
     values = settings_file.read_values(backend.config_path)
-    assert values == {"CJ_REMOTE_INPUT": "false", "CJ_SUBTITLE_LANG": "fr"}
+    assert values == {"ARMREST_REMOTE_INPUT": "false", "ARMREST_SUBTITLE_LANG": "fr"}
     assert window.save_settings(restart=False) == []  # nothing changed the second time
 
 
@@ -397,7 +432,7 @@ def test_the_store_build_hides_the_update_notice_setting(qapp, tmp_path: Path) -
 
     backend = FakeBackend(tmp_path)
     backend.channel = "store"
-    assert "CJ_UPDATE_CHECK" not in ControlWindow(backend).inputs
+    assert "ARMREST_UPDATE_CHECK" not in ControlWindow(backend).inputs
 
 
 @pytest.mark.gui
@@ -416,9 +451,9 @@ def test_the_wizard_saves_the_choices_and_marks_setup_done(qapp, tmp_path: Path)
     )
     assert wizard.check_paired() and "Ana's phone" in wizard.pair_note.text()
     changed = wizard.finish_setup()
-    assert sorted(changed) == ["CJ_CRASH_REPORTS", "CJ_GEMINI_API_KEY"]
+    assert sorted(changed) == ["ARMREST_CRASH_REPORTS", "ARMREST_GEMINI_API_KEY"]
     assert state.setup_done
-    assert settings_file.read_values(backend.config_path)["CJ_CRASH_REPORTS"] == "true"
+    assert settings_file.read_values(backend.config_path)["ARMREST_CRASH_REPORTS"] == "true"
 
 
 @pytest.mark.gui
@@ -429,4 +464,4 @@ def test_the_wizard_never_saves_a_malformed_key(qapp, tmp_path: Path) -> None:  
     wizard = WelcomeWizard(backend, on_finished=lambda: None)
     wizard.use_gemini.setChecked(True)
     wizard.gemini_key.setText("oops")
-    assert "CJ_GEMINI_API_KEY" not in wizard.choices()
+    assert "ARMREST_GEMINI_API_KEY" not in wizard.choices()

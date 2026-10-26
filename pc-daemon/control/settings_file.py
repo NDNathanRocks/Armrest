@@ -1,8 +1,13 @@
-"""Read and change %APPDATA%\\CouchJarvis\\config.env without losing anything the user wrote.
+"""Read and change %APPDATA%\\Armrest\\config.env without losing anything the user wrote.
 
 Only the settings listed in FIELDS are offered in the window. Saving rewrites the one active
-``CJ_NAME=value`` line of each changed setting (or appends it), keeps every comment and every other
-line, and replaces the file atomically. An emptied setting is removed, so the app default applies.
+``ARMREST_NAME=value`` line of each changed setting (or appends it), keeps every comment and every
+other line, and replaces the file atomically. An emptied setting is removed, so the app default
+applies.
+
+Files from before the rename (0.5.0) say ``CJ_NAME``. Those lines are read as ``ARMREST_NAME`` and
+keep their name when changed, so an older app installed over this one still finds them. Where a
+file has both, ``ARMREST_`` wins, as it does for the app (config.py).
 """
 
 from __future__ import annotations
@@ -17,12 +22,21 @@ from pathlib import Path
 from typing import Literal
 
 Kind = Literal["bool", "choice", "text", "secret", "number"]
-_ACTIVE = re.compile(r"^\s*(CJ_[A-Z0-9_]+)\s*=\s*(.*?)\s*$")
+_ACTIVE = re.compile(r"^\s*((?:ARMREST|CJ)_[A-Z0-9_]+)\s*=\s*(.*?)\s*$")
+_PREFIX = "ARMREST_"
+_LEGACY_PREFIX = "CJ_"
+
+
+def canonical(name: str) -> str:
+    """``CJ_X`` (before 0.5.0) and ``ARMREST_X`` are the same setting."""
+    if name.startswith(_LEGACY_PREFIX):
+        return _PREFIX + name[len(_LEGACY_PREFIX) :]
+    return name
 
 
 @dataclass(frozen=True)
 class Field:
-    name: str  # CJ_...
+    name: str  # ARMREST_...
     label: str
     kind: Kind
     default: str
@@ -36,7 +50,7 @@ class Field:
 
 FIELDS: tuple[Field, ...] = (
     Field(
-        "CJ_GEMINI_API_KEY",
+        "ARMREST_GEMINI_API_KEY",
         "Gemini key",
         "secret",
         "",
@@ -45,7 +59,7 @@ FIELDS: tuple[Field, ...] = (
         help="Free from aistudio.google.com/apikey. Makes free-form commands fast on any PC.",
     ),
     Field(
-        "CJ_ROUTER_PROVIDER",
+        "ARMREST_ROUTER_PROVIDER",
         "Understand commands with",
         "choice",
         "auto",
@@ -57,7 +71,7 @@ FIELDS: tuple[Field, ...] = (
         ),
     ),
     Field(
-        "CJ_STT_DEVICE",
+        "ARMREST_STT_DEVICE",
         "Speech recognition runs on",
         "choice",
         "auto",
@@ -65,7 +79,7 @@ FIELDS: tuple[Field, ...] = (
         choices=(("auto", "Automatic"), ("cuda", "NVIDIA graphics card"), ("cpu", "Processor")),
     ),
     Field(
-        "CJ_GROQ_API_KEY",
+        "ARMREST_GROQ_API_KEY",
         "Groq key",
         "secret",
         "",
@@ -74,7 +88,7 @@ FIELDS: tuple[Field, ...] = (
         help="Optional, free: cloud speech recognition for PCs without a graphics card.",
     ),
     Field(
-        "CJ_ELEVENLABS_API_KEY",
+        "ARMREST_ELEVENLABS_API_KEY",
         "ElevenLabs key",
         "secret",
         "",
@@ -82,7 +96,7 @@ FIELDS: tuple[Field, ...] = (
         help="Optional: natural spoken replies (its free plan has a monthly allowance).",
     ),
     Field(
-        "CJ_SUBTITLE_LANG",
+        "ARMREST_SUBTITLE_LANG",
         "Subtitle language",
         "text",
         "en",
@@ -90,7 +104,7 @@ FIELDS: tuple[Field, ...] = (
         help='Two-letter code used by "turn on subtitles": en, fr, es...',
     ),
     Field(
-        "CJ_REMOTE_INPUT",
+        "ARMREST_REMOTE_INPUT",
         "Phones may use the touchpad and keyboard",
         "bool",
         "true",
@@ -98,7 +112,7 @@ FIELDS: tuple[Field, ...] = (
         help="Turn off to limit phones to media and browser commands.",
     ),
     Field(
-        "CJ_HUD_SCREEN_INDEX",
+        "ARMREST_HUD_SCREEN_INDEX",
         "Show the QR code and messages on",
         "number",
         "0",
@@ -108,7 +122,7 @@ FIELDS: tuple[Field, ...] = (
         maximum=15,
     ),
     Field(
-        "CJ_HUD_BADGE_HIDE_S",
+        "ARMREST_HUD_BADGE_HIDE_S",
         "Hide the TV status pill after (seconds)",
         "number",
         "10",
@@ -118,10 +132,14 @@ FIELDS: tuple[Field, ...] = (
         maximum=3600,
     ),
     Field(
-        "CJ_UPDATE_CHECK", "Tell me when a new version is out", "bool", "true", section="Privacy"
+        "ARMREST_UPDATE_CHECK",
+        "Tell me when a new version is out",
+        "bool",
+        "true",
+        section="Privacy",
     ),
     Field(
-        "CJ_CRASH_REPORTS",
+        "ARMREST_CRASH_REPORTS",
         "Send anonymous crash reports",
         "bool",
         "false",
@@ -133,17 +151,20 @@ BY_NAME = {f.name: f for f in FIELDS}
 
 
 def read_values(path: Path) -> dict[str, str]:
-    """Active settings in the file (the last line wins, as for the app itself)."""
+    """Active settings in the file by their ARMREST_ name (the last line wins, and an ARMREST_
+    line beats a CJ_ one, as for the app itself)."""
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return {}
+    legacy: dict[str, str] = {}
     values: dict[str, str] = {}
     for line in lines:
         m = _ACTIVE.match(line)
         if m:
-            values[m[1]] = _unquote(m[2])
-    return values
+            target = legacy if m[1].startswith(_LEGACY_PREFIX) else values
+            target[canonical(m[1])] = _unquote(m[2])
+    return {**legacy, **values}
 
 
 def current(path: Path) -> dict[str, str]:
@@ -171,7 +192,7 @@ def validate(name: str, value: str) -> str | None:
             return f"At most {field.maximum:g}."
     if field.kind == "secret" and value and (" " in value or len(value) < 8):
         return "That does not look like a key: paste it again."
-    if name == "CJ_SUBTITLE_LANG" and not re.fullmatch(r"[a-z]{2}", value):
+    if name == "ARMREST_SUBTITLE_LANG" and not re.fullmatch(r"[a-z]{2}", value):
         return "Use a two-letter language code, like en or fr."
     return None
 
@@ -196,13 +217,14 @@ def save(path: Path, changes: Mapping[str, str]) -> list[str]:
     written: set[str] = set()
     for line in lines:
         m = _ACTIVE.match(line)
-        if m and m[1] in changed:
-            if m[1] in written:
-                continue  # a duplicate line: the value is written once
-            written.add(m[1])
-            value = changes[m[1]].strip()
+        name = canonical(m[1]) if m else ""
+        if m and name in changed:
+            if name in written:
+                continue  # a duplicate line (or the same setting under both names): written once
+            written.add(name)
+            value = changes[name].strip()
             if value:
-                out.append(f"{m[1]}={_quote(value)}")
+                out.append(f"{m[1]}={_quote(value)}")  # the line keeps its own name
             continue
         out.append(line)
     for name in changed:

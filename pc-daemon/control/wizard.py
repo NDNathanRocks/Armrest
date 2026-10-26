@@ -77,7 +77,7 @@ class WelcomeWizard(QWizard):
             )
         if self.screen_choice.count() == 0:
             self.screen_choice.addItem("Screen 1")
-        current = settings_file.current(self.backend.config_path)["CJ_HUD_SCREEN_INDEX"]
+        current = settings_file.current(self.backend.config_path)["ARMREST_HUD_SCREEN_INDEX"]
         self.screen_choice.setCurrentIndex(min(int(float(current)), self.screen_choice.count() - 1))
         layout.addWidget(self.screen_choice)
         layout.addStretch(1)
@@ -151,7 +151,7 @@ class WelcomeWizard(QWizard):
                 row.addWidget(self.download_button)
                 row.addStretch(1)
                 layout.addLayout(row)
-        existing = settings_file.current(self.backend.config_path)["CJ_GEMINI_API_KEY"]
+        existing = settings_file.current(self.backend.config_path)["ARMREST_GEMINI_API_KEY"]
         self.gemini_key.setText(existing)
         (self.use_gemini if existing else self.use_none).setChecked(True)
         layout.addWidget(self.brain_note)
@@ -167,10 +167,10 @@ class WelcomeWizard(QWizard):
         self.crash_reports = QCheckBox(
             "Send anonymous crash reports (only the error, never names or what you watch)"
         )
-        self.crash_reports.setChecked(values["CJ_CRASH_REPORTS"] == "true")
+        self.crash_reports.setChecked(values["ARMREST_CRASH_REPORTS"] == "true")
         layout.addWidget(self.crash_reports)
         self.update_check = QCheckBox("Tell me when a new version is out")
-        self.update_check.setChecked(values["CJ_UPDATE_CHECK"] == "true")
+        self.update_check.setChecked(values["ARMREST_UPDATE_CHECK"] == "true")
         self.update_check.setVisible(self.backend.channel != "store")
         layout.addWidget(self.update_check)
         layout.addStretch(1)
@@ -215,18 +215,18 @@ class WelcomeWizard(QWizard):
 
     def choices(self) -> dict[str, str]:
         out = {
-            "CJ_HUD_SCREEN_INDEX": str(self.screen_choice.currentIndex()),
-            "CJ_CRASH_REPORTS": "true" if self.crash_reports.isChecked() else "false",
+            "ARMREST_HUD_SCREEN_INDEX": str(self.screen_choice.currentIndex()),
+            "ARMREST_CRASH_REPORTS": "true" if self.crash_reports.isChecked() else "false",
         }
         if self.backend.channel != "store":
-            out["CJ_UPDATE_CHECK"] = "true" if self.update_check.isChecked() else "false"
+            out["ARMREST_UPDATE_CHECK"] = "true" if self.update_check.isChecked() else "false"
         key = self.gemini_key.text().strip()
         if (
             self.use_gemini.isChecked()
             and key
-            and settings_file.validate("CJ_GEMINI_API_KEY", key) is None
+            and settings_file.validate("ARMREST_GEMINI_API_KEY", key) is None
         ):
-            out["CJ_GEMINI_API_KEY"] = key
+            out["ARMREST_GEMINI_API_KEY"] = key
         return out
 
     def finish_setup(self) -> list[str]:

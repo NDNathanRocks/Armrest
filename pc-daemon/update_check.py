@@ -2,7 +2,7 @@
 
 Once a day the app asks GitHub's public "latest release" endpoint for the newest version number.
 Nothing about this PC is sent, and nothing is downloaded or run: the phone and TV only show that a
-newer version exists and where to get it. Turn it off with CJ_UPDATE_CHECK=false.
+newer version exists and where to get it. Turn it off with ARMREST_UPDATE_CHECK=false.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ async def fetch_latest(client: httpx.AsyncClient) -> str | None:
             RELEASES_API,
             headers={
                 "Accept": "application/vnd.github+json",
-                "User-Agent": f"CouchJarvis/{__version__}",
+                "User-Agent": f"Armrest/{__version__}",
             },
         )
         resp.raise_for_status()

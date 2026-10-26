@@ -8,8 +8,21 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, model_validator
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+from app_dirs import local_dir, remap_legacy, roaming_dir
+
+ENV_PREFIX = "ARMREST_"
+# Settings from before the rename (0.5.0). Always read, so no config.env ever has to be rewritten;
+# where both are set, ARMREST_ wins.
+LEGACY_ENV_PREFIX = "CJ_"
 
 _EDGE_CANDIDATES = (
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
@@ -18,13 +31,16 @@ _EDGE_CANDIDATES = (
 
 
 def _local_app_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
-    return Path(base) / "CouchJarvis"
+    return local_dir()
 
 
 def _roaming_app_dir() -> Path:
-    base = os.environ.get("APPDATA") or str(Path.home() / ".config")
-    return Path(base) / "CouchJarvis"
+    return roaming_dir()
+
+
+def env_value(name: str) -> str | None:
+    """An environment variable by its short name (``ROOM_FILE``), under either prefix."""
+    return os.environ.get(ENV_PREFIX + name) or os.environ.get(LEGACY_ENV_PREFIX + name)
 
 
 def _default_edge_path() -> Path:
@@ -45,14 +61,49 @@ def user_config_file() -> Path:
     return _roaming_app_dir() / "config.env"
 
 
-class Settings(BaseSettings):
+def _env_files() -> tuple[Path, Path]:
     # Later files win: a .env in the working directory (development) overrides the user config.
+    return user_config_file(), Path(".env")
+
+
+class Settings(BaseSettings):
+    # The files are named in get_settings, not here: the data folder may move (app_dirs) between
+    # importing this module and reading the settings.
     model_config = SettingsConfigDict(
-        env_prefix="CJ_",
-        env_file=(user_config_file(), ".env"),
+        env_prefix=ENV_PREFIX,
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        files = (
+            dotenv_settings.env_file if isinstance(dotenv_settings, DotEnvSettingsSource) else None
+        )
+        return (
+            init_settings,
+            env_settings,
+            EnvSettingsSource(settings_cls, env_prefix=LEGACY_ENV_PREFIX),
+            dotenv_settings,
+            DotEnvSettingsSource(settings_cls, env_file=files, env_prefix=LEGACY_ENV_PREFIX),
+            file_secret_settings,
+        )
+
+    @model_validator(mode="after")
+    def _follow_moved_folders(self) -> Settings:
+        """A config.env that names a file in the old CouchJarvis folder means the moved one."""
+        for name, info in type(self).model_fields.items():
+            value = getattr(self, name)
+            if info.annotation in (Path, Path | None) and isinstance(value, Path):
+                object.__setattr__(self, name, remap_legacy(value))
+        return self
 
     # Cloud relay / PWA
     relay_ws_url: str | None = None
@@ -66,7 +117,7 @@ class Settings(BaseSettings):
 
     # Edge / CDP
     edge_path: Path = _default_edge_path()
-    edge_profile_dir: Path = _local_app_dir() / "edge-profile"
+    edge_profile_dir: Path = Field(default_factory=lambda: _local_app_dir() / "edge-profile")
     cdp_port: int = 9222
 
     # STT
@@ -95,22 +146,24 @@ class Settings(BaseSettings):
     crash_dsn: str | None = None
     # Direct download: paste the licence key you bought here (the Control Center will do it).
     license_key: SecretStr | None = None
-    license_file: Path = _roaming_app_dir() / "license.json"
+    license_file: Path = Field(default_factory=lambda: _roaming_app_dir() / "license.json")
 
     # Spoken replies ("Now playing X on YouTube Music"). Preferences are changed from the phone and
     # saved per TV. ElevenLabs is optional (its free plan is ~10k credits a month); without a key
     # the free Microsoft Edge neural voices speak, and Windows' own voices work offline.
     elevenlabs_api_key: SecretStr | None = None
     elevenlabs_monthly_chars: int = 9000  # stop before the free allowance runs out
-    voice_file: Path = _roaming_app_dir() / "voice.json"
-    bookmarks_file: Path = _roaming_app_dir() / "bookmarks.json"
-    browser_file: Path = _roaming_app_dir() / "browser.json"
-    memory_file: Path = _roaming_app_dir() / "memory.json"  # the last few commands, PC only
-    voice_cache_dir: Path = _local_app_dir() / "voice-cache"
+    voice_file: Path = Field(default_factory=lambda: _roaming_app_dir() / "voice.json")
+    bookmarks_file: Path = Field(default_factory=lambda: _roaming_app_dir() / "bookmarks.json")
+    browser_file: Path = Field(default_factory=lambda: _roaming_app_dir() / "browser.json")
+    memory_file: Path = Field(
+        default_factory=lambda: _roaming_app_dir() / "memory.json"
+    )  # the last few commands, PC only
+    voice_cache_dir: Path = Field(default_factory=lambda: _local_app_dir() / "voice-cache")
 
     # Storage / misc
-    telemetry_dir: Path = _local_app_dir() / "telemetry"
-    room_file: Path = _roaming_app_dir() / "room.json"
+    telemetry_dir: Path = Field(default_factory=lambda: _local_app_dir() / "telemetry")
+    room_file: Path = Field(default_factory=lambda: _roaming_app_dir() / "room.json")
     hud_screen_index: int = 0
     hud_badge_hide_s: float = 10.0  # the TV status pill fades after this much quiet; 0 = always on
     log_level: str = "INFO"
@@ -126,7 +179,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings(_env_file=_env_files())  # type: ignore[call-arg]
 
 
 def init_dpi_awareness() -> bool:

@@ -275,7 +275,7 @@ class ControlWindow(QWidget):
         section = None
         form: QFormLayout | None = None
         for field in settings_file.FIELDS:
-            if field.name == "CJ_UPDATE_CHECK" and self.backend.channel == "store":
+            if field.name == "ARMREST_UPDATE_CHECK" and self.backend.channel == "store":
                 continue  # the Store updates Store apps
             if field.section != section:
                 section = field.section
@@ -321,7 +321,7 @@ class ControlWindow(QWidget):
             check = QCheckBox()
             check.setChecked(value == "true")
             return check
-        if field.name == "CJ_HUD_SCREEN_INDEX":
+        if field.name == "ARMREST_HUD_SCREEN_INDEX":
             combo = QComboBox()
             for i, screen in enumerate(QGuiApplication.screens()):
                 size = screen.size()
@@ -353,7 +353,7 @@ class ControlWindow(QWidget):
         for name, widget in self.inputs.items():
             if isinstance(widget, QCheckBox):
                 out[name] = "true" if widget.isChecked() else "false"
-            elif name == "CJ_HUD_SCREEN_INDEX" and isinstance(widget, QComboBox):
+            elif name == "ARMREST_HUD_SCREEN_INDEX" and isinstance(widget, QComboBox):
                 out[name] = str(widget.currentIndex())
             elif isinstance(widget, QComboBox):
                 out[name] = str(widget.currentData())

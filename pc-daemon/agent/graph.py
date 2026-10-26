@@ -193,7 +193,9 @@ class AgentDeps:
     subtitle_lang: str = "en"  # default language for "turn on subtitles"
     voice: VoiceService | None = None  # spoken replies; None = silent (tests, no speakers)
     bookmarks: BookmarkStore | None = None  # saved pages
-    remote_input: bool = True  # spoken key presses follow CJ_REMOTE_INPUT like the phone keyboard
+    remote_input: bool = (
+        True  # spoken key presses follow ARMREST_REMOTE_INPUT like the phone keyboard
+    )
     prefs: BrowserPrefs | None = None  # ad blocking etc.
     memory: ConversationMemory | None = None  # last few turns + a question awaiting an answer
     show_qr: Callable[[], None] = lambda: None  # set by main when a HUD exists

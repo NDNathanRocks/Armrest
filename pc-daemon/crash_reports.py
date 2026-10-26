@@ -1,4 +1,4 @@
-"""Opt-in crash reports (Sentry). Off unless the user turns them on (CJ_CRASH_REPORTS=true).
+"""Opt-in crash reports (Sentry). Off unless the user turns them on (ARMREST_CRASH_REPORTS=true).
 
 What is sent: the error type, the code lines it went through (file and function names of this
 app), the app version and channel, and Windows' version. What is never sent: the PC or user name,

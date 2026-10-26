@@ -121,7 +121,7 @@ def issue_key(private_key: Any, name: str, order: str, issued: dt.date) -> str:
 
 
 class LicenceFile:
-    """%APPDATA%\\CouchJarvis\\license.json: first run, the key, the last Store answer."""
+    """%APPDATA%\\Armrest\\license.json: first run, the key, the last Store answer."""
 
     def __init__(self, path: Path) -> None:
         self.path = path

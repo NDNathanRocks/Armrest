@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 AttrValue = str | int | float | bool | None
 
 _current_span: contextvars.ContextVar[Span | None] = contextvars.ContextVar(
-    "cj_current_span", default=None
+    "armrest_current_span", default=None
 )
 
 
