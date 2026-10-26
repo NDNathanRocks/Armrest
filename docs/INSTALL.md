@@ -15,12 +15,12 @@ Time needed: about 10 minutes, plus a few more the first time voice is used (it 
 
 ## Option A: the installer (recommended)
 
-1. Download **CouchJarvis-Setup.exe** and run it. It installs just for you; no administrator rights needed.
+1. Download **Armrest-Setup.exe** and run it. It installs just for you; no administrator rights needed.
    - Windows may show **"Windows protected your PC"** because the installer isn't code-signed. Click **More info**,
      then **Run anyway**.
 2. Choose whether to **start Armrest when you sign in to Windows**. Say yes if this PC lives next to the TV.
 3. Leave **Start Armrest now** ticked and click **Finish**.
-4. A **QR code** appears on the screen (the overlay goes on the monitor set by `CJ_HUD_SCREEN_INDEX`, default `0`).
+4. A **QR code** appears on the screen (the overlay goes on the monitor set by `ARMREST_HUD_SCREEN_INDEX`, default `0`).
 5. A **Microsoft Edge** window opens: this is the "TV browser" Armrest controls. **Sign in to YouTube (and anything
    else you use) once here**; it remembers.
 6. Windows may ask to allow Armrest through the firewall. **Allow on private networks** if you want the
@@ -28,10 +28,10 @@ Time needed: about 10 minutes, plus a few more the first time voice is used (it 
 
 ## Option B: portable zip
 
-1. Download and unzip **CouchJarvis-portable-x.y.z.zip** anywhere (for example `C:\CouchJarvis`).
-2. Double-click `CouchJarvis\CouchJarvis.exe`. Same as steps 4-6 above.
+1. Download and unzip **Armrest-portable-x.y.z.zip** anywhere (for example `C:\Armrest`).
+2. Double-click `Armrest\Armrest.exe`. Same as steps 4-6 above.
 
-To start it at login, put a shortcut to `CouchJarvis.exe` in `shell:startup` (press Win+R and type that).
+To start it at login, put a shortcut to `Armrest.exe` in `shell:startup` (press Win+R and type that).
 
 ## Pair your phone
 
@@ -53,14 +53,14 @@ Tip: add the page to your phone's home screen (Share -> Add to Home Screen) so i
   installer does **not** bundle them (about 1 GB), so out of the box it quietly uses the **CPU** instead, which is slower but
   works; the log says "GPU speech failed ... using the CPU". Running from source, `uv pip install -r requirements-gpu.txt`
   adds them and the GPU is used automatically.
-- *No GPU, or the PC is slow?* The app picks the `small` speech model by itself without an NVIDIA GPU (and `large-v3-turbo` with one). You can force a size with `CJ_STT_MODEL=base` in your settings file (below), or get a free key from
-  [console.groq.com](https://console.groq.com) and set `CJ_GROQ_API_KEY=gsk_...` to do voice in the cloud.
+- *No GPU, or the PC is slow?* The app picks the `small` speech model by itself without an NVIDIA GPU (and `large-v3-turbo` with one). You can force a size with `ARMREST_STT_MODEL=base` in your settings file (below), or get a free key from
+  [console.groq.com](https://console.groq.com) and set `ARMREST_GROQ_API_KEY=gsk_...` to do voice in the cloud.
 
 **Free-form commands.** "pause", "volume to 30", "new tab", "play episode 5", "search for ..." work immediately. For anything
 else the app needs an AI model ("the brain"). Without one you will hear *"My brain is not set up on this PC yet"*.
 
 - *Cloud, fastest (recommended):* get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and paste it
-  into the installer's "AI brain" page, or add `CJ_GEMINI_API_KEY=...` to your settings file. Nothing to download.
+  into the installer's "AI brain" page, or add `ARMREST_GEMINI_API_KEY=...` to your settings file. Nothing to download.
 - *Local, private, works offline:* tick **Download the local AI brain now** on the last page of the installer, or run
   **Set up AI brain** from the Start menu any time. It installs [Ollama](https://ollama.com) and downloads `qwen2.5:7b`
   (NVIDIA GPU) or the smaller `phi4-mini` (no GPU), plus `qwen2.5vl:7b` for finding buttons on screen when there is a GPU.
@@ -83,41 +83,45 @@ and pairing your first phone. Closing the window keeps the app running in the tr
 
 ## Your settings file
 
-`%APPDATA%\CouchJarvis\config.env` (paste that into the File Explorer address bar). It's a plain text file of `NAME=value`
-lines; lines starting with `#` are ignored. **Restart Armrest after editing**: end `CouchJarvis.exe` in Task Manager, then start it from the Start menu. All settings are listed [below](#all-settings).
+`%APPDATA%\Armrest\config.env` (paste that into the File Explorer address bar). It's a plain text file of `NAME=value`
+lines; lines starting with `#` are ignored. **Restart Armrest after editing**: end `Armrest.exe` in Task Manager, then start it from the Start menu. All settings are listed [below](#all-settings).
+
+Before 0.5.0 the app was called CouchJarvis, and its settings lived in `%APPDATA%\CouchJarvis` with names starting
+`CJ_`. The first start of 0.5.0 moves that folder to `Armrest` by itself (the TV browser profile moves too, so you
+stay signed in). Old `CJ_` lines keep working; where a file has both, the `ARMREST_` line wins.
 
 The Start menu's **Armrest settings** shortcut opens the Settings page (or this file, if the app is not running).
 The window offers the everyday settings; advanced ones are still edited here.
 
 **API keys are never shipped inside the app.** The installer contains no Groq or Gemini key (the build refuses to finish if
 it finds the builder's keys in it). If you want cloud speech or cloud understanding, get your own free key and add a line
-to your settings file: `CJ_GROQ_API_KEY=gsk_...` and/or `CJ_GEMINI_API_KEY=...`. Both are optional.
+to your settings file: `ARMREST_GROQ_API_KEY=gsk_...` and/or `ARMREST_GEMINI_API_KEY=...`. Both are optional.
 Keys are stored as plain text in that file, which only your Windows account can read by default; do not share it
 or put it in a shared folder. Use a free-tier key you can revoke.
 
-Logs are in `%LOCALAPPDATA%\CouchJarvis\logs`. They never contain pairing links or secrets.
+Logs are in `%LOCALAPPDATA%\Armrest\logs`. They never contain pairing links or secrets.
 
 ### All settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| `CJ_RELAY_WS_URL` | set by the installer | The cloud relay the phones and the PC meet at |
-| `CJ_PWA_BASE_URL` | set by the installer | Where the phone app is hosted; the QR code points here |
-| `CJ_STT_DEVICE` | `auto` | Speech recognition on `auto` (the GPU if there is one), `cuda` or `cpu` |
-| `CJ_STT_MODEL` | `auto` | Whisper model. `auto` = `large-v3-turbo` with an NVIDIA GPU, `small` without; set `base` on a very weak PC |
-| `CJ_GROQ_API_KEY` | none | Free cloud speech-to-text, used only if local speech fails |
-| `CJ_ROUTER_PROVIDER` | `auto` | The AI helper: `auto` = Gemini when `CJ_GEMINI_API_KEY` is set, else a local Ollama model (the other is the fallback); or force `ollama` / `gemini` |
-| `CJ_OLLAMA_TEXT_MODEL` / `CJ_OLLAMA_VLM_MODEL` | `auto` / `qwen2.5vl:7b` | Local models. `auto` = `qwen2.5:7b` with an NVIDIA GPU, `phi4-mini` without. **Set up AI brain** (Start menu) downloads them |
-| `CJ_GEMINI_API_KEY` | none | Free Gemini key for understanding free-form commands and finding buttons on screen |
-| `CJ_SUBTITLE_LANG` | `en` | The language "turn on subtitles" picks when you don't name one (`en`, `es`, `fr`, `de`...) |
-| `CJ_ELEVENLABS_API_KEY` | none | Optional spoken-reply voice (capped at `CJ_ELEVENLABS_MONTHLY_CHARS`, default 9000), then offline Windows voices. Replies are switched on and styled from the phone's Settings |
-| `CJ_REMOTE_INPUT` | `true` | Let paired owner phones move the pointer and type |
-| `CJ_HUD_SCREEN_INDEX` | `0` | Which monitor shows the TV overlay |
-| `CJ_HUD_BADGE_HIDE_S` | `10` | The status pill on the TV fades after this many quiet seconds (`0` = always shown) |
-| `CJ_UPDATE_CHECK` | `true` | Once a day, ask GitHub whether a newer release exists and show a notice (nothing is downloaded or sent) |
-| `CJ_CRASH_REPORTS` | `false` | Send anonymous crash reports (the welcome window asks) |
-| `CJ_EDGE_PATH` | auto | Path to `msedge.exe` if it isn't found |
-| `CJ_LOG_LEVEL` | `INFO` | `DEBUG` for more detail |
+| `ARMREST_RELAY_WS_URL` | set by the installer | The cloud relay the phones and the PC meet at |
+| `ARMREST_PWA_BASE_URL` | set by the installer | Where the phone app is hosted; the QR code points here |
+| `ARMREST_STT_DEVICE` | `auto` | Speech recognition on `auto` (the GPU if there is one), `cuda` or `cpu` |
+| `ARMREST_STT_MODEL` | `auto` | Whisper model. `auto` = `large-v3-turbo` with an NVIDIA GPU, `small` without; set `base` on a very weak PC |
+| `ARMREST_GROQ_API_KEY` | none | Free cloud speech-to-text, used only if local speech fails |
+| `ARMREST_ROUTER_PROVIDER` | `auto` | The AI helper: `auto` = Gemini when `ARMREST_GEMINI_API_KEY` is set, else a local Ollama model (the other is the fallback); or force `ollama` / `gemini` |
+| `ARMREST_OLLAMA_TEXT_MODEL` / `ARMREST_OLLAMA_VLM_MODEL` | `auto` / `qwen2.5vl:7b` | Local models. `auto` = `qwen2.5:7b` with an NVIDIA GPU, `phi4-mini` without. **Set up AI brain** (Start menu) downloads them |
+| `ARMREST_GEMINI_API_KEY` | none | Free Gemini key for understanding free-form commands and finding buttons on screen |
+| `ARMREST_SUBTITLE_LANG` | `en` | The language "turn on subtitles" picks when you don't name one (`en`, `es`, `fr`, `de`...) |
+| `ARMREST_ELEVENLABS_API_KEY` | none | Optional spoken-reply voice (capped at `ARMREST_ELEVENLABS_MONTHLY_CHARS`, default 9000), then offline Windows voices. Replies are switched on and styled from the phone's Settings |
+| `ARMREST_REMOTE_INPUT` | `true` | Let paired owner phones move the pointer and type |
+| `ARMREST_HUD_SCREEN_INDEX` | `0` | Which monitor shows the TV overlay |
+| `ARMREST_HUD_BADGE_HIDE_S` | `10` | The status pill on the TV fades after this many quiet seconds (`0` = always shown) |
+| `ARMREST_UPDATE_CHECK` | `true` | Once a day, ask GitHub whether a newer release exists and show a notice (nothing is downloaded or sent) |
+| `ARMREST_CRASH_REPORTS` | `false` | Send anonymous crash reports (the welcome window asks) |
+| `ARMREST_EDGE_PATH` | auto | Path to `msedge.exe` if it isn't found |
+| `ARMREST_LOG_LEVEL` | `INFO` | `DEBUG` for more detail |
 
 ## Free trial and licence
 
@@ -125,7 +129,7 @@ Logs are in `%LOCALAPPDATA%\CouchJarvis\logs`. They never contain pairing links 
   **Buy**, which opens the Store page on the TV.
 - **From the website (direct download):** the app is free for 14 days from its first start. After that it still pairs
   phones and shows what is playing, but commands stop until a licence key is added. Paste the key you received in the
-  window's **Licence** page (or put `CJ_LICENSE_KEY=ARMREST1....` in your settings file and restart the app).
+  window's **Licence** page (or put `ARMREST_LICENSE_KEY=ARMREST1....` in your settings file and restart the app).
   The key is checked on the PC, offline.
 
 ## Updating and uninstalling
@@ -135,7 +139,7 @@ Logs are in `%LOCALAPPDATA%\CouchJarvis\logs`. They never contain pairing links 
   starts it again. Your settings, paired phones, room keys and TV browser sign-ins are never touched, and you are not asked
   for the Gemini key again. Installing an older version over a newer one asks first.
 - **Update notice:** once a day Armrest asks GitHub whether a newer release exists and shows "Armrest X is out" on
-  the phone. It only tells you; nothing is downloaded or run for you. Turn it off with `CJ_UPDATE_CHECK=false`.
+  the phone. It only tells you; nothing is downloaded or run for you. Turn it off with `ARMREST_UPDATE_CHECK=false`.
 - **Phone app problems after an update?** Settings -> **Reset app cache** reloads the newest page without un-pairing.
   If the update adds features that need the cloud relay, the person who runs the relay must update it too.
 - **Uninstall:** Windows Settings -> Apps -> Armrest -> Uninstall. It asks whether to also delete your settings, paired
@@ -147,18 +151,18 @@ Tap **Log** at the top of the phone app first: it shows what the PC heard and wh
 
 | Problem | What to try |
 |---|---|
-| No QR code appears | Check it's running (Task Manager -> `CouchJarvis.exe`). The overlay may be on another monitor: set `CJ_HUD_SCREEN_INDEX=1` |
+| No QR code appears | Check it's running (Task Manager -> `Armrest.exe`). The overlay may be on another monitor: set `ARMREST_HUD_SCREEN_INDEX=1` |
 | The phone says **PC offline** | Armrest isn't running or the PC is asleep. Start it from the Start menu |
 | The phone stays on **Connecting...** | Open the link in Chrome to rule out a Safari quirk; check the PC has internet; look at `daemon.log` for `cloud relay: up` |
 | **"Recording was incomplete"** | Update both the PC app and the cloud relay to the latest version |
-| Voice says it couldn't hear you | The Log shows `heard:`. Allow the mic in the phone browser. First use downloads the model, so wait. Try `CJ_STT_DEVICE=cpu` or a Groq key |
+| Voice says it couldn't hear you | The Log shows `heard:`. Allow the mic in the phone browser. First use downloads the model, so wait. Try `ARMREST_STT_DEVICE=cpu` or a Groq key |
 | **"My brain is not set up"** / **"missing its model"** | Run **Set up AI brain** from the Start menu, or add a Gemini key (see *Free-form commands* above) |
-| **"My brain took too long"** | The local model is slow on a CPU. Add a Gemini key, or use a smaller model: `CJ_OLLAMA_TEXT_MODEL=qwen2.5:1.5b` (faster, understands less) |
+| **"My brain took too long"** | The local model is slow on a CPU. Add a Gemini key, or use a smaller model: `ARMREST_OLLAMA_TEXT_MODEL=qwen2.5:1.5b` (faster, understands less) |
 | It misunderstands a command | The Log shows what it heard. Free-form commands need the AI brain (above) |
 | Fullscreen doesn't work | Tap it twice (ad pages swallow the first click). The Log shows what failed. If Edge's tab strip still shows, use **Touchpad & keys -> F11** or say "press F11" |
 | Edge doesn't open / commands do nothing | Close every Edge window and restart Armrest; it owns the TV browser on debug port 9222 |
-| I want to remove someone's access | On the PC: `curl.exe http://127.0.0.1:8765/api/devices` lists phones; `curl.exe -X POST http://127.0.0.1:8765/api/devices/<id>/revoke` removes one. Or delete `%APPDATA%\CouchJarvis\room.json` and restart: that makes a new room and QR, and every phone has to pair again |
-| Touchpad / keyboard tab is missing | `CJ_REMOTE_INPUT=false` is set on the PC, or the phone isn't connected |
+| I want to remove someone's access | On the PC: `curl.exe http://127.0.0.1:8765/api/devices` lists phones; `curl.exe -X POST http://127.0.0.1:8765/api/devices/<id>/revoke` removes one. Or delete `%APPDATA%\Armrest\room.json` and restart: that makes a new room and QR, and every phone has to pair again |
+| Touchpad / keyboard tab is missing | `ARMREST_REMOTE_INPUT=false` is set on the PC, or the phone isn't connected |
 
 ---
 
@@ -172,7 +176,7 @@ For whoever publishes Armrest (you, not the people installing it).
 - **Inno Setup 6** to produce the `.exe` installer: `winget install JRSoftware.InnoSetup`. Without it, the build still
   produces the portable zip.
 - Your cloud relay deployed and your phone app on Cloudflare Pages ([DEVELOPING.md](DEVELOPING.md): *Deploy the cloud relay*, *Deploy the phone app*), with
-  `CJ_RELAY_WS_URL` and `CJ_PWA_BASE_URL` set in the repo `.env` (or pass them as parameters below).
+  `ARMREST_RELAY_WS_URL` and `ARMREST_PWA_BASE_URL` set in the repo `.env` (or pass them as parameters below).
 
 ### Build
 
@@ -188,9 +192,9 @@ It builds the phone app, writes the defaults, freezes the daemon with PyInstalle
 
 | File | What |
 |---|---|
-| `CouchJarvis\` | The frozen app (about 500 MB unpacked) |
-| `CouchJarvis-portable-<version>.zip` | The same, zipped (about 200 MB) |
-| `CouchJarvis-Setup.exe` | The installer (needs Inno Setup) |
+| `Armrest\` | The frozen app (about 500 MB unpacked) |
+| `Armrest-portable-<version>.zip` | The same, zipped (about 200 MB) |
+| `Armrest-Setup.exe` | The installer (needs Inno Setup) |
 
 Speech and vision models are **not** bundled: they download on first use, which keeps the installer a reasonable size.
 Playwright's browsers are **not** bundled either; the app drives the Edge already on the PC.

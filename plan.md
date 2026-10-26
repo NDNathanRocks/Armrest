@@ -858,13 +858,13 @@ This section replaces `docs/HANDOFF.md` as the place to resume from. Sections 12
 ### 14.1 Current state
 | Thing | State |
 |---|---|
-| PC app | **0.4.0** committed, built in `installer\dist`, upgrade-tested 20/20 from published 0.2.0. The user pushes, tags and publishes the GitHub release (notes: `docs/RELEASE_NOTES_0.4.0.md`). Last published release before it: 0.2.0 |
+| PC app | **0.4.0 published** (tag `v0.4.0`). **0.5.0 = the Armrest rename (14.3)**: committed, built in `installer\dist` (`Armrest-Setup.exe`), upgrade-tested 33/33 from published 0.4.0 and 33/33 from 0.2.0 (sandboxed data). Not pushed, tagged or released: the user does that (notes: `docs/RELEASE_NOTES_0.5.0.md`) |
 | Licensing | 0.x direct builds are a **free preview** (`licensing.is_preview`): no trial, no key. The 14-day trial (`TRIAL_DAYS`) starts on the first run of 1.0 |
 | Phone app | **Cloudflare Pages only**, project `armrest-app`, https://armrest-app.pages.dev. Vercel was removed 2026-10-26. Deploy: `docs/DEVELOPING.md` > *Deploy the phone app*. Redeploy after every UI commit |
 | QR codes | Always `armrest-app.pages.dev`. `brand.qr_base_url` maps old Vercel addresses still in a `config.env` |
-| Relay | AWS account 332130072624, stack `couch-jarvis`, us-east-2, `wss://ltqv0kbaoc.execute-api.us-east-2.amazonaws.com/prod`. **Production still runs the pre-5D relay** (no `room.delete`, no per-IP limits): deploy with the user's OK (`sam build`, `sam deploy --no-execute-changeset`, review, execute) |
+| Relay | AWS account 332130072624, stack `couch-jarvis`, us-east-2, `wss://ltqv0kbaoc.execute-api.us-east-2.amazonaws.com/prod`. **Production still runs the pre-5D relay** (no `room.delete`, no per-IP limits, and it rejects tokens with the `armrest` issuer). The code waiting to deploy = 5D + accept both issuers (user, 2026-10-26: one combined deploy, ask at the change-set step): `sam build`, `sam deploy --no-execute-changeset`, show the user, execute on their OK |
 | Docs | `README.md` (public), `docs/COMMANDS.md`, `docs/INSTALL.md` (settings table), `docs/DEVELOPING.md`, legal drafts in `docs/*.md` rendered by `scripts/legal_pages.py` |
-| Checks | 1,029 Python tests, 209 web tests, 26 real-Edge tests, ruff, mypy --strict, eslint, tsc: all green |
+| Checks | 1,039 Python tests, 209 web tests, 26 real-Edge tests, ruff, mypy --strict, eslint, tsc: all green |
 
 0.4.0 added: commands follow the tab Edge shows (`/json/list` order; Playwright fakes focus, so page-side checks
 can't tell), custom keyboard-shortcut favourites, playback speed / exit fullscreen / duplicate tab, seek fixes
@@ -873,10 +873,11 @@ can't tell), custom keyboard-shortcut favourites, playback speed / exit fullscre
 ### 14.2 To-do, in order
 | # | Who | Task |
 |---|---|---|
-| 1 | User | Push, tag `v0.4.0`, publish the release with `CouchJarvis-Setup.exe` + the portable zip. Re-pair phones once (new address) |
+| 1 | ~~User~~ | ~~Push, tag `v0.4.0`, publish the release~~ Done 2026-10-26 |
 | 2 | User | Test 0.4.0 on the TV with a real phone: tab following, custom shortcuts, speed, exit fullscreen, seek on real sites, touchpad feel |
-| 3 | Me (OK needed) | Deploy the relay (5D code) so *Delete my cloud data* works |
-| 4 | Me | **Full rename to Armrest** (14.3) |
+| 3 | Me (OK needed) | Deploy the relay: 5D + accept the `armrest` issuer, in one deploy (see 14.1 Relay) |
+| 4 | ~~Me~~ → User | ~~Full rename to Armrest (14.3)~~ Built as **0.5.0** (commits `7bec2f8`, `24f8fe5` and the docs commit). User: push, tag `v0.5.0`, publish `Armrest-Setup.exe` + `Armrest-portable-0.5.0.zip`, then install it on the TV PC and check the move (14.3 *Status*) |
+| 4b | User, then me | Rename the GitHub repo `couch-jarvis` → `armrest`; then I change `RELEASES_API`, `RELEASES_URL`, the README links and `git remote`, and drop them from `test_no_old_name.py`'s allow-list |
 | 5 | User + me | **Pricing and payments** (14.4) |
 | 6 | Me | 5H leftovers: English + French (`t()` + a test that both dictionaries match), accessibility pass with axe, guest passes that expire after 24 h, "try the remote on this PC" (loopback pairing, for Store reviewers) |
 | 7 | Me | 5J packaging: version 1.0.0, exe version info, MSIX build with the Partner Center identity, MSIX→MSIX update test, Inno→Store migration, WACK, a clean PC in Windows Sandbox. Remove the test certificate `CN=CouchJarvisDev` afterwards (13.10) |
@@ -910,6 +911,30 @@ below.
 | GitHub repo | `NDNathanRocks/couch-jarvis` | The user renames it to `armrest` in GitHub settings. GitHub redirects the web, git and API URLs, so installed copies' update checks keep working. Then update `RELEASES_API` (`update_check.py`), `RELEASES_URL` (`App.tsx`), the README and `git remote`. **Never create a new repo named couch-jarvis afterwards**: that breaks the redirect | GitHub keeps redirects for renamed repos |
 | Local folder | `Projects\couch-jarvis` | Rename after the repo. The Claude memory folder is keyed by this path: copy the memory files to the new project's memory folder | — |
 | Docs and tests | many mentions | Sweep last; add a test that fails on any new `CouchJarvis` outside an allow-list of migration code | Keeps it from creeping back |
+
+**Status (2026-10-26): built in 0.5.0**, with these differences from the table:
+- **Phone storage keys stay** (`cj.*`, IndexedDB `couch-jarvis`). Nobody sees them, and one Cloudflare deploy reaches
+  every phone at once, so a migration bug would un-pair them all. Not worth the risk.
+- **The JWT issuer:** both the relay and the LAN server *accept* `armrest`, but still *issue* `couch-jarvis`,
+  because ≤ 0.4 PCs verify tokens offline and accept only that. Switch issuing to `armrest` once no ≤ 0.4 PC is
+  left. Drop `couch-jarvis` 180 days after that.
+- **The data move** (`pc-daemon/app_dirs.py`):
+  - The supervisor runs it before it opens any file, and only when it is the first copy running.
+  - Each folder moves in one `rename`. Windows refuses that while Edge holds the profile (tested), so a busy folder
+    is used where it is and retried on the next start.
+  - A new `Armrest` folder found in the way is put aside as `Armrest.before-move-<time>`.
+  - `MOVED_TO_ARMREST.txt` marks the move as done.
+  - `config.env` paths that point into a moved folder are remapped.
+  - No `schema.json` change.
+- **Settings:** `ARMREST_` wins over `CJ_` (env and files). The Settings window keeps a `CJ_` line's name when it
+  changes that line.
+- **The install folder:** an update keeps the folder it finds; new installs go to `{autopf}\Armrest`. Nothing moves.
+- **The uninstaller** "delete my data" now removes both the `Armrest` and the `CouchJarvis` folders.
+- **Not done yet:**
+  - The GitHub repo URLs (14.2 #4b).
+  - The MSIX test identity `CouchJarvis.Dev` / `CN=CouchJarvisDev`, which Partner Center's identity replaces (5J).
+  - The relay stack name (kept, as planned).
+  - Old release notes and HANDOFF.md (history, left as they are).
 
 Upgrade-test additions: install 0.2.0 and 0.4.0, then the renamed build over each. Check that `Armrest.exe` runs and
 no `CouchJarvis.exe` is left; that the data was moved (`room.json` hash unchanged, Edge profile sign-ins kept, the old
@@ -960,9 +985,10 @@ settings written down in `docs/STORE_LISTING.md`.
 | Merchant for direct sales | Lemon Squeezy (simpler for one person) or Paddle | The Worker, `get.html` |
 | Keys for preview (0.x) users | Automatic via an "I used the preview" form, or on request | Free-key flow |
 | Refund window | 14 days is common | Terms, merchant settings |
-| When to rename | A 0.5.0 release on its own, or folded into 1.0.0 | 14.3 |
-| GitHub repo rename | The user renames `couch-jarvis` → `armrest` in GitHub settings, then the code follows (14.3) | 14.3 |
-| Relay deploy | OK to deploy the 5D relay code to production | *Delete my cloud data*, the JWT issuer change |
+| When to rename | **Decided 2026-10-26: 0.5.0 on its own** (built) | — |
+| GitHub repo rename | **Decided: later.** URLs stay until the user renames it (14.2 #4b) | 14.2 #4b |
+| Relay deploy | **Decided: one combined deploy** (5D + both issuers); the user approves at the change-set step | *Delete my cloud data*, issuing `armrest` |
+| Store only? | The user asks whether the Microsoft Store alone is enough (answered in chat 2026-10-26: yes for launch; add direct sales only if people ask for a non-Store download). Confirm | Whether to build the key Worker at all |
 | Legal placeholders | Publisher name, support email, `[BRACKETED]` items in `docs/*.md` | Store submission |
 
 Facts to check before acting on 14.4 (from memory, not verified): the Store commission, whether non-game Store apps
@@ -977,9 +1003,11 @@ may use their own payment system, the free individual Partner Center registratio
 4. Pick the next item from 14.2. For 14.4, start only with the user's answers to 14.5.
 5. **Hard rules (they caused real problems before):**
    - Ask before any push, tag, production deploy or AWS change (the user pushes and releases themselves).
-   - Never delete or rewrite `%APPDATA%\CouchJarvis` or the Edge TV profile. Back up `room.json` before installer
-     tests (its SHA-256 starts `36F07BF8`).
-   - Installer tests only via `scripts/test_installer_upgrade.ps1`. Afterwards check `Get-Process _unins*,unins000`
+   - Never delete or rewrite `%APPDATA%\CouchJarvis` (or `Armrest`, after the move) or the Edge TV profile. Back up
+     `room.json` before installer tests (its SHA-256 starts `36F07BF8`).
+   - Installer tests only via `scripts/test_installer_upgrade.ps1` (since 0.5.0 it sandboxes APPDATA/LOCALAPPDATA and
+     holds the real folders open, so the move can't touch them; pass `-OldVersion` and a fresh `-Work`).
+     The old installers are not in the repo: download 0.2.0 / 0.4.0 from the GitHub releases. Afterwards check `Get-Process _unins*,unins000`
      and kill any leftover uninstaller: a hidden "delete settings?" prompt once wiped the user's data.
    - Never use a plain Inno `MsgBox` (use `SuppressibleMsgBox`). Never change the Inno `AppId`.
    - New phone controls must hide on older PCs (`daemon_version`, `web-remote/src/utils/version.ts`).

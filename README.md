@@ -18,7 +18,7 @@ YouTube"*, drag the volume slider, skip the intro, or use your phone as a touchp
 - **Built for the sofa.** If the browser crashes, it comes back signed in. If your internet drops, it switches to your
   home network.
 
-> Formerly "Couch Jarvis": same app, same settings and paired phones.
+> Formerly "Couch Jarvis": same app, same settings and paired phones (0.5.0 moves them to the Armrest folders by itself).
 
 ---
 
@@ -26,7 +26,7 @@ YouTube"*, drag the volume slider, skip the intro, or use your phone as a touchp
 
 | | |
 |---|---|
-| **Windows installer** | Download `CouchJarvis-Setup.exe` from the [latest release](https://github.com/NDNathanRocks/couch-jarvis/releases/latest) and run it. Updates install over the top; your settings and paired phones stay. |
+| **Windows installer** | Download `Armrest-Setup.exe` from the [latest release](https://github.com/NDNathanRocks/couch-jarvis/releases/latest) and run it. Updates install over the top; your settings and paired phones stay. |
 | **Microsoft Store** | Coming soon. |
 | **Phone** | Nothing to install. Scan the QR code on your TV. Optionally use *Add to Home Screen* for an app icon. |
 

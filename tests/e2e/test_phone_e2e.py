@@ -301,11 +301,21 @@ def test_layout_touch_targets_overflow_and_layout_shift(
         """() => {
           const vw = document.documentElement.clientWidth;
           const small = [], offscreen = [];
+          // A swipe strip (the Apps row) scrolls on its own: its chips are a swipe away, not lost,
+          // as long as the strip itself fits the screen.
+          const inSwipeStrip = (el) => {
+            for (let p = el.parentElement; p; p = p.parentElement) {
+              if (!['auto', 'scroll'].includes(getComputedStyle(p).overflowX)) continue;
+              const s = p.getBoundingClientRect();
+              return s.left >= -1 && s.right <= vw + 1;
+            }
+            return false;
+          };
           for (const el of document.querySelectorAll('button, input, a, [role=button]')) {
             const r = el.getBoundingClientRect();
             if (r.width === 0 || r.height === 0) continue;
             if (r.width < 44 || r.height < 44) small.push(`${el.getAttribute('aria-label') || el.textContent.trim()}: ${Math.round(r.width)}x${Math.round(r.height)}`);
-            if (r.left < -1 || r.right > vw + 1) offscreen.push(el.getAttribute('aria-label') || el.textContent.trim());
+            if ((r.left < -1 || r.right > vw + 1) && !inSwipeStrip(el)) offscreen.push(el.getAttribute('aria-label') || el.textContent.trim());
           }
           return {
             overflowX: document.documentElement.scrollWidth - vw,

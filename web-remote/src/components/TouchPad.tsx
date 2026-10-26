@@ -74,7 +74,7 @@ export function TouchPad({ onPointer, disabled }: Props) {
                 setSpeed(s);
                 savePadSpeed(s);
               }}
-              className={`min-h-9 rounded-full px-3 font-semibold capitalize ${speed === s ? "bg-white/15 text-white" : "text-muted"}`}
+              className={`min-h-11 min-w-11 rounded-full px-3 font-semibold capitalize ${speed === s ? "bg-white/15 text-white" : "text-muted"}`}
             >
               {s}
             </button>

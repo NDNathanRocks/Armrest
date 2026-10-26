@@ -3,9 +3,10 @@
 This is for people working on the code. For using the app, see the [README](../README.md); for installing it, see
 [INSTALL.md](INSTALL.md). Agents working in this repo should also read `CLAUDE.md` and `AGENT_PROTOCOL.md`.
 
-> The visible name is **Armrest**. Internal names stay `CouchJarvis` on purpose (the exe, the
-> `%APPDATA%\CouchJarvis` folders, the Inno `AppId`, `CJ_` settings, storage keys), so existing installs and paired
-> phones keep working through updates. Don't rename them.
+> The app was called CouchJarvis until 0.5.0. A few things keep that name on purpose so existing installs and
+> paired phones keep working: the Inno `AppId` (never changes), the data move in `pc-daemon/app_dirs.py`, the `CJ_`
+> settings still read next to `ARMREST_`, the token issuer, the relay stack, and the phone's storage keys.
+> `tests/daemon/test_no_old_name.py` fails if the old name turns up anywhere else.
 
 ## How it works
 
@@ -116,7 +117,7 @@ sam deploy --no-execute-changeset     # review the change set, then execute it
 ```
 
 The first deploy needs `--guided` (set `BudgetEmail` for a budget alarm). Copy the **WebSocketUrl** output into
-`CJ_RELAY_WS_URL` and `VITE_RELAY_WS_URL`. The relay creates its own master secret on first use. Lambda and DynamoDB
+`ARMREST_RELAY_WS_URL` and `VITE_RELAY_WS_URL`. The relay creates its own master secret on first use. Lambda and DynamoDB
 (on-demand) stay inside the always-free allowances for a household; API Gateway WebSocket costs cents per month at this
 traffic. Measured cost and load numbers are in `plan.md` section 13.2.
 
@@ -133,7 +134,7 @@ npm run build
 npx wrangler pages deploy dist --project-name armrest-app --branch main
 ```
 
-`CJ_PWA_BASE_URL` (and `brand.SITE_URL`) point the TV's QR code at this address. The security headers (strict CSP,
+`ARMREST_PWA_BASE_URL` (and `brand.SITE_URL`) point the TV's QR code at this address. The security headers (strict CSP,
 `no-referrer` because the pairing link holds a secret, microphone-only permissions) come from `public/_headers`, and
 `public/_redirects` sends every path to the app. **Redeploy after every UI commit**: phones load the hosted app, not
 the repo. A phone's pairing is stored per web address, so changing the address unpairs every phone.
@@ -153,7 +154,7 @@ dependency would be bundled.
 The full text is in `plan.md` section 12.
 
 - **One version:** bump `pc-daemon/version.py` (semver). `installer/build.ps1` and `web-remote/package.json` follow it.
-- **Installers update in place:** never change the Inno `AppId`. An update never touches `%APPDATA%\CouchJarvis\`
+- **Installers update in place:** never change the Inno `AppId`. An update never touches `%APPDATA%\Armrest\` (or `CouchJarvis\` before the move)
   or the Edge TV profile.
 - **Upgrade test before every tag:** install the previous published version, install the candidate over it, and check
   that settings and `room.json` are untouched (`scripts/test_installer_upgrade.ps1`).
