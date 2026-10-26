@@ -53,7 +53,7 @@ class Daemon:
         return f"{self.url}/?room={ident.room_id}&secret={ident.room_secret}"
 
     def start(self) -> None:
-        env = {**os.environ, "CJ_ROOM_FILE": str(self.room_file), "PYTHONUNBUFFERED": "1"}
+        env = {**os.environ, "ARMREST_ROOM_FILE": str(self.room_file), "PYTHONUNBUFFERED": "1"}
         log = open(self.log, "ab") if self.log else subprocess.DEVNULL  # noqa: SIM115
         self.proc = subprocess.Popen(  # noqa: S603
             [

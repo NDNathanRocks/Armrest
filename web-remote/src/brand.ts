@@ -1,5 +1,6 @@
-// The product name people see; keep in step with pc-daemon/brand.py. Storage keys, the
-// IndexedDB name and wire ids keep the old "couch-jarvis" names so pairings survive.
+// The product name people see; keep in step with pc-daemon/brand.py. Storage keys ("cj.*") and the
+// IndexedDB name keep the pre-0.5.0 "couch-jarvis" names on purpose: nobody sees them, and one deploy
+// reaches every phone at once, so a migration bug would un-pair them all.
 export const APP_NAME = "Armrest";
 export const TAGLINE = "Your PC, within arm's reach";
 

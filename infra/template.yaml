@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  CouchJarvis serverless relay. API Gateway WebSocket + Lambda (Python 3.12) + DynamoDB (on-demand, TTL).
+  Armrest (formerly CouchJarvis) serverless relay. API Gateway WebSocket + Lambda (Python 3.12) + DynamoDB (on-demand, TTL).
   Phones and the PC daemon exchange typed envelopes through it; no accounts, no servers.
-  Deploy:  sam build && sam deploy --guided   (then put the WebSocketUrl output in CJ_RELAY_WS_URL)
+  Deploy:  sam build && sam deploy --guided   (then put the WebSocketUrl output in ARMREST_RELAY_WS_URL)
 
 Parameters:
   StageName:
@@ -433,5 +433,5 @@ Resources:
 
 Outputs:
   WebSocketUrl:
-    Description: Put this in the daemon's CJ_RELAY_WS_URL and the PWA's VITE_RELAY_WS_URL
+    Description: Put this in the daemon's ARMREST_RELAY_WS_URL and the PWA's VITE_RELAY_WS_URL
     Value: !Sub "wss://${RelayApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"

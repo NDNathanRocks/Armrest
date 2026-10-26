@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-ISS = (ROOT / "installer" / "CouchJarvis.iss").read_text(encoding="utf-8")
+ISS = (ROOT / "installer" / "Armrest.iss").read_text(encoding="utf-8")
 BUILD = (ROOT / "installer" / "build.ps1").read_text(encoding="utf-8")
 VERSION_PY = (ROOT / "pc-daemon" / "version.py").read_text(encoding="utf-8")
 
@@ -48,7 +48,7 @@ def test_the_installer_detects_and_updates_an_existing_install() -> None:
 
 def test_an_update_keeps_the_users_settings_and_stops_the_running_app() -> None:
     assert "ShouldSkipPage" in ISS and "KeyPage.ID" in ISS  # the key page is not re-asked
-    assert "taskkill.exe" in ISS and "StopCouchJarvis" in ISS  # Setup cannot close a windowless app
+    assert "taskkill.exe" in ISS and "StopApp" in ISS  # Setup cannot close a windowless app
     assert "RelaunchAfterSilentUpdate" in ISS  # a silent update starts the app again
 
 
@@ -61,12 +61,16 @@ def test_only_the_uninstaller_can_delete_user_data_and_it_asks_first() -> None:
     )
     assert "Also delete your {#AppName} settings" in ISS and "MB_DEFBUTTON2" in ISS  # default is No
     assert "[UninstallDelete]" not in ISS
-    # An update may only remove old shortcuts (the 0.x name), never files or folders of the user.
+    # An update may only remove old shortcuts (the 0.x name) and the pre-0.5.0 exe in the program
+    # folder, never files or folders of the user.
+    assert '#define OldExe "CouchJarvis.exe"' in ISS
     if "[InstallDelete]" in ISS:
         section = ISS.split("[InstallDelete]", 1)[1].split("\n[", 1)[0]
         entries = [ln for ln in section.splitlines() if ln.strip() and not ln.startswith(";")]
         assert entries
         for entry in entries:
+            if entry.strip() == 'Type: files; Name: "{app}\\{#OldExe}"':
+                continue
             assert re.fullmatch(
                 r'Type: files; Name: "\{(autoprograms|autodesktop)\}\\[^"*?\\]+\.lnk"',
                 entry.strip(),

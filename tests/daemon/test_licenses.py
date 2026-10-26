@@ -37,7 +37,7 @@ def test_licences_that_block_shipping(licence: str) -> None:
 
 
 def test_gpl_helpers_are_excluded_from_builds() -> None:
-    spec = (ROOT / "installer" / "couch_jarvis.spec").read_text(encoding="utf-8")
+    spec = (ROOT / "installer" / "armrest.spec").read_text(encoding="utf-8")
     excludes = spec[spec.index("excludes = [") :]
     for module in ("pymsgbox", "mouseinfo", "edge_tts"):
         assert f'"{module}"' in excludes

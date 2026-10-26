@@ -1,7 +1,7 @@
 [project]
-name = "couch-jarvis"
+name = "armrest"
 version = "0.1.0"
-description = "AegisRemote / CouchJarvis - hybrid cloud-to-edge voice & vision PC agent"
+description = "Armrest - control the PC on your TV from any phone (voice, buttons, touchpad)"
 requires-python = ">=3.12"
 
 [tool.ruff]

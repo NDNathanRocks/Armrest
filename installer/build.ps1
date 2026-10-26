@@ -1,21 +1,21 @@
 <#
 .SYNOPSIS
-    Builds CouchJarvis.exe (PyInstaller) and, when Inno Setup 6 is installed, CouchJarvis-Setup.exe.
+    Builds Armrest.exe (PyInstaller) and, when Inno Setup 6 is installed, Armrest-Setup.exe.
 
 .DESCRIPTION
     1. builds the phone app (web-remote) so the PC can also serve it on the LAN
     2. writes installer\defaults.env from the relay/PWA URLs (parameters, else your repo .env)
-    3. freezes pc-daemon with PyInstaller into installer\dist\CouchJarvis\
+    3. freezes pc-daemon with PyInstaller into installer\dist\Armrest\
     4. zips a portable copy, and compiles the installer if ISCC.exe is available
 
     The defaults.env baked into a build holds only public endpoints, never secrets. Each
     install generates its own room, secret and keys on first run.
 
 .PARAMETER RelayUrl
-    wss://... WebSocket URL from `sam deploy`. Default: CJ_RELAY_WS_URL from the repo .env.
+    wss://... WebSocket URL from `sam deploy`. Default: ARMREST_RELAY_WS_URL (or CJ_) from the repo .env.
 
 .PARAMETER PwaUrl
-    https://... where the phone app is hosted. Default: CJ_PWA_BASE_URL from the repo .env.
+    https://... where the phone app is hosted. Default: ARMREST_PWA_BASE_URL (or CJ_) from the repo .env.
 
 .PARAMETER Version
     Version stamped into the installer. Default: __version__ in pc-daemon\version.py (the one source).
@@ -38,7 +38,7 @@ param(
     [string]$Version,
     [switch]$SkipWeb,
     [ValidateSet('direct', 'store')][string]$Channel = 'direct',
-    [string]$CrashDsn  # Sentry DSN for opt-in crash reports (public by design); default: CJ_CRASH_DSN in .env
+    [string]$CrashDsn  # Sentry DSN for opt-in crash reports (public by design); default: ARMREST_CRASH_DSN in .env
 )
 
 Set-StrictMode -Version Latest
@@ -72,16 +72,21 @@ function Read-DotEnv {
 }
 
 $env_ = Read-DotEnv (Join-Path $repo '.env')
-if (-not $RelayUrl) { $RelayUrl = $env_['CJ_RELAY_WS_URL'] }
-if (-not $PwaUrl) { $PwaUrl = $env_['CJ_PWA_BASE_URL'] }
+# A setting from the repo .env by its short name: ARMREST_X, else the pre-0.5.0 CJ_X.
+function Get-Setting([string]$Name) {
+    if ($env_['ARMREST_' + $Name]) { return $env_['ARMREST_' + $Name] }
+    return $env_['CJ_' + $Name]
+}
+if (-not $RelayUrl) { $RelayUrl = Get-Setting 'RELAY_WS_URL' }
+if (-not $PwaUrl) { $PwaUrl = Get-Setting 'PWA_BASE_URL' }
 if (-not $RelayUrl -or -not $PwaUrl) {
-    throw 'Pass -RelayUrl and -PwaUrl (or set CJ_RELAY_WS_URL and CJ_PWA_BASE_URL in the repo .env).'
+    throw 'Pass -RelayUrl and -PwaUrl (or set ARMREST_RELAY_WS_URL and ARMREST_PWA_BASE_URL in the repo .env).'
 }
 if ($RelayUrl -notmatch '^wss://') { throw "RelayUrl must start with wss:// (got $RelayUrl)" }
 if ($PwaUrl -notmatch '^https://') { throw "PwaUrl must start with https:// (got $PwaUrl)" }
-if (-not $CrashDsn) { $CrashDsn = $env_['CJ_CRASH_DSN'] }
+if (-not $CrashDsn) { $CrashDsn = Get-Setting 'CRASH_DSN' }
 if ($CrashDsn -and $CrashDsn -notmatch '^https://[0-9a-f]+@[\w.-]+/\d+$') { throw "CrashDsn is not a Sentry DSN (got $CrashDsn)" }
-if (-not $CrashDsn) { Write-Host '==> no CJ_CRASH_DSN: this build cannot send crash reports' }
+if (-not $CrashDsn) { Write-Host '==> no ARMREST_CRASH_DSN: this build cannot send crash reports' }
 
 Write-Host "==> relay $RelayUrl"
 Write-Host "==> phone app $PwaUrl"
@@ -102,15 +107,15 @@ if (-not $SkipWeb) {
 }
 
 $defaults = @(
-    '# Couch Jarvis settings (edit, then restart the app). Created on first run.'
-    "CJ_RELAY_WS_URL=$RelayUrl"
-    "CJ_PWA_BASE_URL=$PwaUrl"
+    '# Armrest settings (edit, then restart the app). Created on first run.'
+    "ARMREST_RELAY_WS_URL=$RelayUrl"
+    "ARMREST_PWA_BASE_URL=$PwaUrl"
     '# Speech-to-text: auto uses an NVIDIA GPU when there is one, otherwise the CPU.'
-    'CJ_STT_DEVICE=auto'
-    '# CJ_STT_MODEL=small          speech model (default: auto = large-v3-turbo on a GPU, small on a CPU)'
-    '# CJ_GEMINI_API_KEY=...      free key from aistudio.google.com/apikey: fast cloud understanding of commands'
-    '# CJ_GROQ_API_KEY=gsk_...     free-tier cloud speech-to-text (no GPU needed)'
-    '# CJ_REMOTE_INPUT=true        false = phones cannot move the mouse or type'
+    'ARMREST_STT_DEVICE=auto'
+    '# ARMREST_STT_MODEL=small     speech model (default: auto = large-v3-turbo on a GPU, small on a CPU)'
+    '# ARMREST_GEMINI_API_KEY=... free key from aistudio.google.com/apikey: fast cloud understanding of commands'
+    '# ARMREST_GROQ_API_KEY=gsk_... free-tier cloud speech-to-text (no GPU needed)'
+    '# ARMREST_REMOTE_INPUT=true   false = phones cannot move the mouse or type'
 )
 Set-Content -LiteralPath (Join-Path $PSScriptRoot 'defaults.env') -Value $defaults -Encoding utf8
 $info = [ordered]@{ channel = $Channel; version = $Version }
@@ -129,18 +134,18 @@ if ($LASTEXITCODE -ne 0) { throw 'could not install build requirements' }
 
 Write-Host '==> freezing the daemon (this takes a few minutes)'
 & $python -m PyInstaller --noconfirm --clean `
-    --distpath $dist --workpath (Join-Path $PSScriptRoot 'build') (Join-Path $PSScriptRoot 'couch_jarvis.spec')
+    --distpath $dist --workpath (Join-Path $PSScriptRoot 'build') (Join-Path $PSScriptRoot 'armrest.spec')
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller failed' }
 
 function Assert-NoSecrets {
-    # Fail the build if this machine's API keys (CJ_GROQ_API_KEY, CJ_GEMINI_API_KEY, ...) ended up
+    # Fail the build if this machine's API keys (ARMREST_GROQ_API_KEY, ARMREST_GEMINI_API_KEY, ...) ended up
     # in the app, or if any settings file was bundled. Users add their own keys after installing.
     param([string]$Dir)
     $bundled = Get-ChildItem -LiteralPath $Dir -Recurse -File -Force |
         Where-Object { $_.Name -in '.env', 'config.env', 'room.json' -or $_.Name -like '.env.*' }
     if ($bundled) { throw "Settings file(s) bundled into the app: $($bundled.FullName -join ', ')" }
     $secrets = @{}
-    foreach ($name in 'CJ_GROQ_API_KEY', 'CJ_GEMINI_API_KEY') {
+    foreach ($name in 'ARMREST_GROQ_API_KEY', 'ARMREST_GEMINI_API_KEY', 'CJ_GROQ_API_KEY', 'CJ_GEMINI_API_KEY') {
         if ($env_.ContainsKey($name) -and $env_[$name].Length -ge 8) { $secrets[$name] = $env_[$name] }
     }
     if ($secrets.Count -eq 0) { return }
@@ -165,14 +170,14 @@ function Assert-NotShipped {
     if ($found) { throw "Excluded package(s) ended up in the build: $($found.Name -join ', ')" }
 }
 
-$app = Join-Path $dist 'CouchJarvis'
+$app = Join-Path $dist 'Armrest'
 Assert-NoSecrets $app
 Assert-NotShipped $app
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'THIRD_PARTY_NOTICES.txt') -Destination $app -Force
 $size = (Get-ChildItem -LiteralPath $app -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ('==> built {0} ({1:N0} MB)' -f $app, $size)
 
-$zip = Join-Path $dist "CouchJarvis-portable-$Version.zip"
+$zip = Join-Path $dist "Armrest-portable-$Version.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 # Antivirus often scans fresh binaries and briefly locks them: retry instead of failing the build.
@@ -198,10 +203,10 @@ $iscc = @(
 
 if ($iscc) {
     Write-Host '==> compiling the installer'
-    & $iscc "/DAppVersion=$Version" (Join-Path $PSScriptRoot 'CouchJarvis.iss')
+    & $iscc "/DAppVersion=$Version" (Join-Path $PSScriptRoot 'Armrest.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
-    Write-Host "==> installer: $(Join-Path $dist 'CouchJarvis-Setup.exe')"
+    Write-Host "==> installer: $(Join-Path $dist 'Armrest-Setup.exe')"
 } else {
-    Write-Warning 'Inno Setup 6 was not found, so CouchJarvis-Setup.exe was not built.'
+    Write-Warning 'Inno Setup 6 was not found, so Armrest-Setup.exe was not built.'
     Write-Warning 'Install it with:  winget install JRSoftware.InnoSetup   then run this script again.'
 }

@@ -7,11 +7,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = (ROOT / "installer" / "build.ps1").read_text(encoding="utf-8")
-SPEC = (ROOT / "installer" / "couch_jarvis.spec").read_text(encoding="utf-8")
-ISS = (ROOT / "installer" / "CouchJarvis.iss").read_text(encoding="utf-8")
+SPEC = (ROOT / "installer" / "armrest.spec").read_text(encoding="utf-8")
+ISS = (ROOT / "installer" / "Armrest.iss").read_text(encoding="utf-8")
 
 # Settings the shipped defaults may set. Anything with KEY/SECRET/TOKEN in its name may not.
-PUBLIC_SETTINGS = {"CJ_RELAY_WS_URL", "CJ_PWA_BASE_URL", "CJ_STT_DEVICE"}
+PUBLIC_SETTINGS = {"ARMREST_RELAY_WS_URL", "ARMREST_PWA_BASE_URL", "ARMREST_STT_DEVICE"}
 
 
 def shipped_defaults() -> list[str]:
@@ -30,7 +30,8 @@ def test_only_public_settings_are_active_in_the_shipped_defaults() -> None:
 def test_key_lines_in_the_defaults_are_commented_out_placeholders() -> None:
     keys = [ln for ln in shipped_defaults() if "API_KEY" in ln]
     assert keys, "users should be shown where to add their own keys"
-    assert all(ln.startswith("#") and "..." in ln for ln in keys)  # '# CJ_GROQ_API_KEY=gsk_...'
+    # '# ARMREST_GROQ_API_KEY=gsk_...'
+    assert all(ln.startswith("#") and "..." in ln for ln in keys)
 
 
 def test_the_build_never_bundles_an_env_file() -> None:
@@ -44,7 +45,9 @@ def test_the_build_never_bundles_an_env_file() -> None:
 
 def test_the_build_script_scans_the_output_for_the_builders_own_keys() -> None:
     assert (
-        "Assert-NoSecrets" in BUILD and "CJ_GROQ_API_KEY" in BUILD and "CJ_GEMINI_API_KEY" in BUILD
+        "Assert-NoSecrets" in BUILD
+        and "ARMREST_GROQ_API_KEY" in BUILD
+        and "ARMREST_GEMINI_API_KEY" in BUILD
     )
     assert BUILD.index("Assert-NoSecrets $app") < BUILD.index(
         "CreateFromDirectory"

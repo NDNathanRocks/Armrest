@@ -49,7 +49,7 @@ def test_default_models_allow_commercial_use() -> None:
 
 
 def test_builds_never_ship_edge_tts() -> None:
-    spec = (ROOT / "installer" / "couch_jarvis.spec").read_text(encoding="utf-8")
+    spec = (ROOT / "installer" / "armrest.spec").read_text(encoding="utf-8")
     hidden = spec[spec.index("hiddenimports +=") : spec.index("web_dist")]
     assert "edge_tts" not in hidden
     assert '"edge_tts",' in spec[spec.index("excludes = [") :]

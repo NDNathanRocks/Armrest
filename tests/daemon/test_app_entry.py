@@ -1,4 +1,4 @@
-"""The packaged app (CouchJarvis.exe): config bootstrap, restart policy, frozen paths."""
+"""The packaged app (Armrest.exe): config bootstrap, restart policy, frozen paths."""
 
 from __future__ import annotations
 

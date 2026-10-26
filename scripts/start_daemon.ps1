@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Runs the CouchJarvis PC daemon forever: restarts it if it crashes, with backoff.
+    Runs the Armrest PC daemon forever: restarts it if it crashes, with backoff.
 
 .DESCRIPTION
     - Single instance (a second copy exits immediately).
-    - Logs to %LOCALAPPDATA%\CouchJarvis\logs (7 days kept). Pairing URLs/secrets are never logged.
+    - Logs to %LOCALAPPDATA%\Armrest\logs (7 days kept). Pairing URLs/secrets are never logged.
     - Crash-loop protection: the restart delay doubles (2 s .. 60 s) while the daemon keeps dying
       quickly, and resets once it has stayed up for a minute.
     The daemon itself supervises Edge (watchdog), so this only has to keep the daemon alive.
@@ -28,7 +28,7 @@ param(
     [switch]$Hud,
     [ValidateRange(0, 100000)]
     [int]$MaxRestarts = 0,
-    [string]$LogDir = (Join-Path $env:LOCALAPPDATA 'CouchJarvis\logs')
+    [string]$LogDir = (Join-Path $env:LOCALAPPDATA 'Armrest\logs')
 )
 
 Set-StrictMode -Version Latest
@@ -43,9 +43,9 @@ if (-not (Test-Path -LiteralPath $python)) {
 if (-not (Test-Path -LiteralPath $entry)) { throw "Daemon entrypoint missing: $entry" }
 
 $createdNew = $false
-$mutex = New-Object System.Threading.Mutex($true, 'Local\CouchJarvisDaemon', [ref]$createdNew)
+$mutex = New-Object System.Threading.Mutex($true, 'Local\ArmrestDaemon', [ref]$createdNew)
 if (-not $createdNew) {
-    Write-Warning 'CouchJarvis is already running in this session.'
+    Write-Warning 'Armrest is already running in this session.'
     exit 1
 }
 

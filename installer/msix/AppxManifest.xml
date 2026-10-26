@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- MSIX manifest template for the Microsoft Store build. installer\build_msix.ps1 fills in the
-     double-brace tokens. A full-trust desktop app: the same CouchJarvis.exe as the direct-download build. -->
+     double-brace tokens. A full-trust desktop app: the same Armrest.exe as the direct-download build. -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
@@ -26,7 +26,7 @@
   </Resources>
 
   <Applications>
-    <Application Id="App" Executable="CouchJarvis.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="App" Executable="Armrest.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="{{DISPLAY_NAME}}"
         Description="{{DESCRIPTION}}"
@@ -48,7 +48,7 @@
   <Extensions>
     <!-- Phones on the same Wi-Fi reach the PC directly when the internet is down (LAN mode). -->
     <desktop2:Extension Category="windows.firewallRules">
-      <desktop2:FirewallRules Executable="CouchJarvis.exe">
+      <desktop2:FirewallRules Executable="Armrest.exe">
         <desktop2:Rule Direction="in" IPProtocol="TCP" LocalPortMin="8765" LocalPortMax="8765" Profile="private" />
       </desktop2:FirewallRules>
     </desktop2:Extension>

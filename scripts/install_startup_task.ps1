@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Registers (or removes) a Task Scheduler job that starts CouchJarvis when you log in.
+    Registers (or removes) a Task Scheduler job that starts Armrest when you log in.
 
 .DESCRIPTION
     The daemon drives a real desktop (Edge, mouse, TV overlay), so it must run in your
@@ -25,7 +25,7 @@
 param(
     [switch]$Uninstall,
     [switch]$NoHud,
-    [string]$TaskName = 'CouchJarvis'
+    [string]$TaskName = 'Armrest'
 )
 
 Set-StrictMode -Version Latest
@@ -59,7 +59,7 @@ $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -Ru
 
 if ($PSCmdlet.ShouldProcess($TaskName, "Register logon task for $user")) {
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
-        -Principal $principal -Description 'CouchJarvis PC daemon (voice/vision TV remote)' -Force | Out-Null
+        -Principal $principal -Description 'Armrest PC daemon (voice/vision TV remote)' -Force | Out-Null
     Write-Host "Installed task '$TaskName' (runs at logon for $user)."
     Write-Host "Start it now with:  Start-ScheduledTask -TaskName $TaskName"
 }

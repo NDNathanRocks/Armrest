@@ -111,7 +111,7 @@ try {
     Write-Host ''
     Write-Host "Could not finish: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host 'You can run "Set up AI brain" from the Start menu again, or add a free Gemini key instead:'
-    Write-Host '  https://aistudio.google.com/apikey  ->  put CJ_GEMINI_API_KEY=... in Armrest settings.'
+    Write-Host '  https://aistudio.google.com/apikey  ->  put ARMREST_GEMINI_API_KEY=... in Armrest settings.'
     Close-Window -Failed
     exit 1
 }

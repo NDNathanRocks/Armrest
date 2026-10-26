@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Prepares the dedicated Microsoft Edge "TV profile" that CouchJarvis drives over CDP.
+    Prepares the dedicated Microsoft Edge "TV profile" that Armrest drives over CDP.
 
 .DESCRIPTION
     Chromium-based browsers refuse remote debugging on the *default* profile, so the daemon uses
@@ -10,10 +10,10 @@
     and the session persists. The daemon's watchdog relaunches Edge with the same flags if it dies.
 
 .PARAMETER ProfileDir
-    User-data directory. Default: %LOCALAPPDATA%\CouchJarvis\edge-profile (matches CJ_EDGE_PROFILE_DIR).
+    User-data directory. Default: %LOCALAPPDATA%\Armrest\edge-profile (matches ARMREST_EDGE_PROFILE_DIR).
 
 .PARAMETER Port
-    Remote debugging port. Default 9222 (matches CJ_CDP_PORT).
+    Remote debugging port. Default 9222 (matches ARMREST_CDP_PORT).
 
 .PARAMETER EdgePath
     Path to msedge.exe. Auto-detected when omitted.
@@ -33,7 +33,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Interactive console tool: output is for a human, not the pipeline.')]
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$ProfileDir = (Join-Path $env:LOCALAPPDATA 'CouchJarvis\edge-profile'),
+    [string]$ProfileDir = (Join-Path $env:LOCALAPPDATA 'Armrest\edge-profile'),
     [ValidateRange(1024, 65535)]
     [int]$Port = 9222,
     [string]$EdgePath,
@@ -97,7 +97,7 @@ if (-not $NoShortcut) {
         $shortcut.TargetPath = $edge
         $shortcut.Arguments = $edgeArgs
         $shortcut.WorkingDirectory = Split-Path -Parent $edge
-        $shortcut.Description = 'Edge with the CouchJarvis TV profile and debug port'
+        $shortcut.Description = 'Edge with the Armrest TV profile and debug port'
         $shortcut.Save()
         Write-Host "Shortcut:    $lnk"
     }
@@ -122,8 +122,8 @@ if ($Launch) {
 
 Write-Host ''
 Write-Host 'Add these to your .env if you changed the defaults:'
-Write-Host "  CJ_EDGE_PATH=$edge"
-Write-Host "  CJ_EDGE_PROFILE_DIR=$ProfileDir"
-Write-Host "  CJ_CDP_PORT=$Port"
+Write-Host "  ARMREST_EDGE_PATH=$edge"
+Write-Host "  ARMREST_EDGE_PROFILE_DIR=$ProfileDir"
+Write-Host "  ARMREST_CDP_PORT=$Port"
 Write-Host ''
 Write-Host 'Next: open "Edge (TV)", sign in to YouTube / YouTube Music once, then start the daemon.'

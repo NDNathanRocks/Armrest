@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for CouchJarvis.exe (onedir). Build with installer\build.ps1.
+# PyInstaller spec for Armrest.exe (onedir). Build with installer\build.ps1.
 #
 # Playwright's Node driver is bundled (collect_all) but NOT its browsers: the app drives the
 # Microsoft Edge that is already on the PC over CDP.
@@ -75,9 +75,9 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="CouchJarvis",
-    console=False,  # no console window: logs go to %LOCALAPPDATA%\CouchJarvis\logs
+    name="Armrest",
+    console=False,  # no console window: logs go to %LOCALAPPDATA%\Armrest\logs
     disable_windowed_traceback=False,
     upx=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="CouchJarvis")
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Armrest")

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Packages the built app (installer\dist\CouchJarvis) as an MSIX for the Microsoft Store.
+    Packages the built app (installer\dist\Armrest) as an MSIX for the Microsoft Store.
 
 .DESCRIPTION
     Run installer\build.ps1 first. This script copies the PyInstaller output into a package layout, adds the
@@ -43,12 +43,12 @@ $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repo '.venv\Scripts\python.exe'
-$app = Join-Path $PSScriptRoot 'dist\CouchJarvis'
-if (-not (Test-Path -LiteralPath (Join-Path $app 'CouchJarvis.exe'))) { throw "Build the app first: installer\build.ps1 -Channel store (missing $app)" }
+$app = Join-Path $PSScriptRoot 'dist\Armrest'
+if (-not (Test-Path -LiteralPath (Join-Path $app 'Armrest.exe'))) { throw "Build the app first: installer\build.ps1 -Channel store (missing $app)" }
 $infoFile = Join-Path $app '_internal\installer\build_info.json'
 $builtChannel = if (Test-Path -LiteralPath $infoFile) { (Get-Content -LiteralPath $infoFile -Raw | ConvertFrom-Json).channel } else { 'none' }
 if ($builtChannel -ne 'store' -and -not $AnyChannel) {
-    throw "installer\dist\CouchJarvis is a '$builtChannel' build. Rebuild with: installer\build.ps1 -Channel store"
+    throw "installer\dist\Armrest is a '$builtChannel' build. Rebuild with: installer\build.ps1 -Channel store"
 }
 
 if (-not $Version) {

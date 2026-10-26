@@ -18,7 +18,7 @@ from importlib import metadata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# Excluded from every build (installer/couch_jarvis.spec "excludes"): edge-tts (its service is not
+# Excluded from every build (installer/armrest.spec "excludes"): edge-tts (its service is not
 # licensed for a product), and the GPLv3 helpers pyautogui imports only if present.
 NOT_SHIPPED = {"edge-tts", "pymsgbox", "mouseinfo"}
 # Licences a closed-source paid app cannot include (LGPL is fine: see the module docstring).

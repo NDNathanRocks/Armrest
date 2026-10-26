@@ -2,8 +2,13 @@
 ; Per-user install: no administrator rights, nothing is written outside the user profile.
 
 #define AppName "Armrest"
-; The 0.x name: its shortcuts are removed on update. Internal names (exe, folders, AppId) never change.
+; The 0.x name: its shortcuts are removed on update. The AppId never changes.
 #define OldAppName "Couch Jarvis"
+; The exe and data folders before 0.5.0. An update stops and deletes the old exe; the app itself
+; moves the data folders on its first start (pc-daemon/app_dirs.py).
+#define OldExe "CouchJarvis.exe"
+#define OldDataDir "CouchJarvis"
+#define AppExe "Armrest.exe"
 
 #ifndef AppVersion
   #define AppVersion "0.1.0"
@@ -14,12 +19,13 @@ AppId={{7B1E3C52-5A9D-4B5E-9C1A-2F4D8E6A0C31}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppName}
-DefaultDirName={autopf}\CouchJarvis
+; New installs only: an update keeps the folder it finds (Programs\CouchJarvis before 0.5.0).
+DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=dist
-OutputBaseFilename=CouchJarvis-Setup
+OutputBaseFilename=Armrest-Setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -33,31 +39,35 @@ CloseApplications=force
 Type: files; Name: "{autoprograms}\{#OldAppName}.lnk"
 Type: files; Name: "{autoprograms}\{#OldAppName} settings.lnk"
 Type: files; Name: "{autodesktop}\{#OldAppName}.lnk"
+; the exe before 0.5.0 (the folder next to it is shared and replaced)
+Type: files; Name: "{app}\{#OldExe}"
 
 [Tasks]
 Name: "startup"; Description: "Start {#AppName} when I sign in to Windows"; GroupDescription: "Startup:"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
 [Files]
-Source: "dist\CouchJarvis\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "dist\Armrest\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\scripts\setup_brain.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\CouchJarvis.exe"
-Name: "{autoprograms}\{#AppName} settings"; Filename: "{app}\CouchJarvis.exe"; Parameters: "--open-settings"; Comment: "Open your settings file (add your own Groq or Gemini key here)"
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
+Name: "{autoprograms}\{#AppName} settings"; Filename: "{app}\{#AppExe}"; Parameters: "--open-settings"; Comment: "Open your settings file (add your own Groq or Gemini key here)"
 Name: "{autoprograms}\Set up AI brain"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\setup_brain.ps1"" -Pause"; Comment: "Download the local AI model that understands free-form commands (about 2-8 GB)"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\CouchJarvis.exe"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "CouchJarvis"; ValueData: """{app}\CouchJarvis.exe"""; Flags: uninsdeletevalue; Tasks: startup
+; the startup entry before 0.5.0 pointed at the old exe
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "CouchJarvis"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExe}"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
-Filename: "{app}\CouchJarvis.exe"; Flags: nowait runasoriginaluser; Check: RelaunchAfterSilentUpdate
-Filename: "{app}\CouchJarvis.exe"; Description: "Start {#AppName} now (a pairing QR code appears on screen)"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Flags: nowait runasoriginaluser; Check: RelaunchAfterSilentUpdate
+Filename: "{app}\{#AppExe}"; Description: "Start {#AppName} now (a pairing QR code appears on screen)"; Flags: nowait postinstall skipifsilent
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\setup_brain.ps1"" -PauseOnError"; Description: "Download the local AI brain now (Ollama and a model, 2-8 GB; skip it if you entered a Gemini key)"; Flags: nowait postinstall skipifsilent; Check: OfferBrainDownload
 
 [UninstallRun]
-Filename: "taskkill.exe"; Parameters: "/im CouchJarvis.exe /f"; Flags: runhidden; RunOnceId: "StopCouchJarvis"
+Filename: "taskkill.exe"; Parameters: "/im {#AppExe} /im {#OldExe} /f"; Flags: runhidden; RunOnceId: "StopArmrest"
 
 [Code]
 const
@@ -124,6 +134,20 @@ begin
   KeyPage.Add('Gemini API key (optional):', False);
 end;
 
+{ The settings folder the app uses: the CouchJarvis one until the app has moved it (app_dirs.py). }
+function DataDir: String;
+begin
+  Result := ExpandConstant('{userappdata}\{#OldDataDir}');
+  if (not DirExists(Result)) or FileExists(Result + '\MOVED_TO_ARMREST.txt') then
+    Result := ExpandConstant('{userappdata}\{#AppName}');
+end;
+
+{ A key line under either name: CJ_ before 0.5.0, ARMREST_ since. }
+function IsKeyLine(const Line: String): Boolean;
+begin
+  Result := (Pos('ARMREST_GEMINI_API_KEY=', Trim(Line)) = 1) or (Pos('CJ_GEMINI_API_KEY=', Trim(Line)) = 1);
+end;
+
 procedure SaveGeminiKey;
 var
   Config, Key: String;
@@ -132,8 +156,8 @@ var
 begin
   Key := Trim(KeyPage.Values[0]);
   if Key = '' then Exit;
-  Config := ExpandConstant('{userappdata}\CouchJarvis\config.env');
-  ForceDirectories(ExpandConstant('{userappdata}\CouchJarvis'));
+  Config := DataDir + '\config.env';
+  ForceDirectories(DataDir);
   { keep the user's settings, else start from the shipped defaults (relay and phone-app addresses) }
   if not LoadStringsFromFile(Config, Lines) then
     if not LoadStringsFromFile(ExpandConstant('{app}\_internal\installer\defaults.env'), Lines) then
@@ -142,12 +166,12 @@ begin
   SetArrayLength(Kept, GetArrayLength(Lines) + 1);
   N := 0;
   for I := 0 to GetArrayLength(Lines) - 1 do
-    if Pos('CJ_GEMINI_API_KEY=', Trim(Lines[I])) <> 1 then
+    if not IsKeyLine(Lines[I]) then
     begin
       Kept[N] := Lines[I];
       N := N + 1;
     end;
-  Kept[N] := 'CJ_GEMINI_API_KEY=' + Key;
+  Kept[N] := 'ARMREST_GEMINI_API_KEY=' + Key;
   SetArrayLength(Kept, N + 1);
   SaveStringsToUTF8FileWithoutBOM(Config, Kept, False);
 end;
@@ -163,25 +187,26 @@ begin
          or RegKeyExists(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe');
 end;
 
-function CouchJarvisRunning: Boolean;
+function ExeRunning(const Exe: String): Boolean;
 var
   Code: Integer;
 begin
   Result := Exec(ExpandConstant('{cmd}'),
-    '/c tasklist /fi "imagename eq CouchJarvis.exe" /nh | find /i "CouchJarvis.exe" >nul',
+    '/c tasklist /fi "imagename eq ' + Exe + '" /nh | find /i "' + Exe + '" >nul',
     '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
 end;
 
-{ A supervisor can start a fresh copy between one kill and the next, so kill until none is left. }
-procedure StopCouchJarvis;
+{ A supervisor can start a fresh copy between one kill and the next, so kill until none is left.
+  Both names: an update from before 0.5.0 finds the old exe running. }
+procedure StopApp;
 var
   Code, Tries: Integer;
 begin
   for Tries := 1 to 10 do
   begin
-    Exec('taskkill.exe', '/im CouchJarvis.exe /f /t', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    Exec('taskkill.exe', '/im {#AppExe} /im {#OldExe} /f /t', '', SW_HIDE, ewWaitUntilTerminated, Code);
     Sleep(1000);
-    if not CouchJarvisRunning then Break;
+    if not (ExeRunning('{#AppExe}') or ExeRunning('{#OldExe}')) then Break;
   end;
   Sleep(500);  { let Windows release the files }
 end;
@@ -191,7 +216,7 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
-  if PreviousVersion <> '' then StopCouchJarvis;
+  if PreviousVersion <> '' then StopApp;
 end;
 
 function InitializeSetup: Boolean;
@@ -218,7 +243,7 @@ begin
                   mbInformation, MB_OKCANCEL, IDOK) = IDOK;
     { The app is a background process with no window Windows could ask to close, so Setup's own
       "close applications" step would give up. Stop it (and the daemon it started) here, first. }
-    if Result then StopCouchJarvis;
+    if Result then StopApp;
   end
   else if not EdgeInstalled then
     Result := SuppressibleMsgBox('Microsoft Edge was not found. {#AppName} drives Edge to play your media, so ' +
@@ -233,7 +258,10 @@ begin
     if SuppressibleMsgBox('Also delete your {#AppName} settings, paired phones and the TV browser profile?',
               mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
     begin
-      DelTree(ExpandConstant('{userappdata}\CouchJarvis'), True, True, True);
-      DelTree(ExpandConstant('{localappdata}\CouchJarvis'), True, True, True);
+      DelTree(ExpandConstant('{userappdata}\{#AppName}'), True, True, True);
+      DelTree(ExpandConstant('{localappdata}\{#AppName}'), True, True, True);
+      { not moved yet (or only the note left behind by the move) }
+      DelTree(ExpandConstant('{userappdata}\{#OldDataDir}'), True, True, True);
+      DelTree(ExpandConstant('{localappdata}\{#OldDataDir}'), True, True, True);
     end;
 end;
