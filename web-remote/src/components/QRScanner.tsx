@@ -1,6 +1,7 @@
 import { APP_NAME, GET_URL, PRIVACY_URL, TAGLINE, TERMS_URL } from "../brand";
 import type { PairParams } from "../connection/roomConnection";
 import type { Connection } from "../state/roomReducer";
+import { PairPanel } from "./PairPanel";
 
 const ROOM_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const SECRET_RE = /^[A-Za-z0-9_-]{16,128}$/;
@@ -27,10 +28,18 @@ interface Props {
   connection: Connection;
   hasPairParams: boolean;
   paired: boolean;
+  /** Pairing from inside the app (scan or typed code) is under way. */
+  pairing?: boolean;
+  onScan: (params: PairParams) => void;
+  onCode: (code: string) => void;
 }
 
-/** Explains pairing: the QR itself is scanned by the phone's own camera app, which opens this page. */
-export function QRScanner({ connection, hasPairParams, paired }: Props) {
+/**
+ * Explains pairing. The phone's own camera app can open the QR (it lands here with the secret in
+ * the URL), or the app scans it itself / takes the typed code: the only ways into an iPhone
+ * home-screen app, which never sees a pairing made in Safari.
+ */
+export function QRScanner({ connection, hasPairParams, paired, pairing = false, onScan, onCode }: Props) {
   if (connection === "unreachable") {
     // Soft failure: the remote stays on screen (disabled) and we keep retrying in the background.
     return (
@@ -47,11 +56,12 @@ export function QRScanner({ connection, hasPairParams, paired }: Props) {
     return (
       <section className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5 text-center" role="alert">
         <h2 className="text-lg font-semibold">This phone is no longer paired</h2>
-        <p className="mt-2 text-sm text-zinc-300">Scan the QR code on the TV again to reconnect.</p>
+        <p className="mt-2 text-sm text-zinc-300">Scan the QR code on the TV again, or type the code under it.</p>
+        <PairPanel onScan={onScan} onCode={onCode} busy={pairing} />
       </section>
     );
   }
-  if (hasPairParams) {
+  if (hasPairParams || pairing) {
     return (
       <section className="rounded-2xl border border-sky-500/40 bg-sky-500/10 p-5 text-center" role="status">
         <h2 className="text-lg font-semibold">Pairing with your TV…</h2>
@@ -59,15 +69,15 @@ export function QRScanner({ connection, hasPairParams, paired }: Props) {
       </section>
     );
   }
-  return <Landing />;
+  return <Landing onScan={onScan} onCode={onCode} />;
 }
 
 /** A visitor with no pairing and no QR link: say what this is and how to start. */
-function Landing() {
+function Landing({ onScan, onCode }: Pick<Props, "onScan" | "onCode">) {
   const steps = [
     { title: `Get ${APP_NAME} on the PC`, text: "The Windows PC that is plugged into your TV." },
-    { title: "Open it", text: "A QR code appears on the TV." },
-    { title: "Scan the code", text: "With this phone's camera. You only do this once." },
+    { title: "Open it", text: "A QR code and a short code appear on the TV." },
+    { title: "Scan it, or type the code", text: "With the button below. You only do this once." },
   ];
   return (
     <section className="glass rise rounded-3xl p-6" aria-labelledby="landing-title">
@@ -91,9 +101,10 @@ function Landing() {
           </li>
         ))}
       </ol>
+      <PairPanel onScan={onScan} onCode={onCode} />
       <a
         href={GET_URL}
-        className="press mt-6 flex min-h-12 items-center justify-center rounded-full bg-accent font-semibold text-zinc-950"
+        className="press glass-btn mt-2 flex min-h-12 items-center justify-center rounded-full font-semibold"
       >
         Get {APP_NAME} for Windows
       </a>

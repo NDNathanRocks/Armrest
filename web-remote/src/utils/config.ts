@@ -6,6 +6,8 @@ export interface Endpoint {
   tokenUrl(args: { roomId: string; token: string; name: string }): string;
   /** WebSocket URL for a phone that still has to send pair.request. */
   pairUrl(args: { roomId: string; name: string }): string;
+  /** WebSocket URL for a phone that typed the TV's short code (it does not know the room yet). */
+  codeUrl(args: { code: string; name: string }): string;
 }
 
 interface LocationLike {
@@ -38,6 +40,7 @@ export function resolveEndpoint(relayUrl: string | undefined, loc: LocationLike)
       transport: "lan",
       tokenUrl: ({ token, name }) => `${base}?${new URLSearchParams({ token, name })}`,
       pairUrl: ({ name }) => `${base}?${new URLSearchParams({ pair: "1", name })}`,
+      codeUrl: ({ name }) => `${base}?${new URLSearchParams({ pair: "1", name })}`, // the PC checks it
     };
   }
   const sep = relay.includes("?") ? "&" : "?";
@@ -45,6 +48,7 @@ export function resolveEndpoint(relayUrl: string | undefined, loc: LocationLike)
     transport: "cloud",
     tokenUrl: ({ roomId, token }) => `${relay}${sep}${new URLSearchParams({ room: roomId, role: "phone", token })}`,
     pairUrl: ({ roomId }) => `${relay}${sep}${new URLSearchParams({ room: roomId, role: "phone", pair: "1" })}`,
+    codeUrl: ({ code }) => `${relay}${sep}${new URLSearchParams({ code, role: "phone", pair: "1" })}`,
   };
 }
 

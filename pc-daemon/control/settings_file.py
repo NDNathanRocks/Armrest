@@ -65,9 +65,10 @@ FIELDS: tuple[Field, ...] = (
         "auto",
         section="AI brain",
         choices=(
-            ("auto", "Automatic (Gemini when a key is set)"),
+            ("auto", "Automatic (Gemini, then Groq, then this PC)"),
+            ("groq", "Groq first"),
             ("ollama", "This PC only"),
-            ("gemini", "Gemini only"),
+            ("gemini", "Gemini first"),
         ),
     ),
     Field(
@@ -85,7 +86,8 @@ FIELDS: tuple[Field, ...] = (
         "",
         section="Voice",
         prefix="gsk_",
-        help="Optional, free: cloud speech recognition for PCs without a graphics card.",
+        help="Optional, free from console.groq.com/keys: a fast backup brain when Gemini is busy, "
+        "and cloud speech recognition for PCs without a graphics card.",
     ),
     Field(
         "ARMREST_ELEVENLABS_API_KEY",

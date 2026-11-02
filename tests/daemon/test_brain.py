@@ -41,7 +41,7 @@ def test_every_kind_has_a_message_that_says_what_to_do() -> None:
     assert "Set up AI brain" in brain_message(LLMError("x", "unavailable"))
     assert "Set up AI brain" in brain_message(LLMError("x", "model_missing"))
     assert "too long" in brain_message(LLMError("x", "timeout"))
-    assert "Gemini key" in brain_message(LLMError("x", "bad_key"))
+    assert "Gemini and Groq keys" in brain_message(LLMError("x", "bad_key"))
     assert brain_message(RuntimeError("unknown"))  # never empty
 
 

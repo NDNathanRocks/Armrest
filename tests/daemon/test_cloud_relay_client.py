@@ -20,6 +20,7 @@ from contracts import (
     CmdButton,
     CmdText,
     ErrorMsg,
+    PairCodeOk,
     Presence,
     RoomDeleted,
     RoomKey,
@@ -29,6 +30,7 @@ from contracts import (
     parse_message,
 )
 from event_bus import EventBus
+from pair_codes import PairCodes, code_hash
 from room import RoomStore
 from service import CommandService
 from support import AgentEnv
@@ -64,6 +66,7 @@ class FakeRelay:
     reject_with: int | None = None
     room_key: str = "relay-issued-room-key"
     confirm_delete: bool = True
+    knows_codes: bool = True
 
     async def handler(self, ws: ServerConnection) -> None:
         self.connections.append(ws)
@@ -77,6 +80,14 @@ class FakeRelay:
                 elif msg["type"] == "room.delete" and self.confirm_delete:
                     done = envelope(RoomDeleted, msg["room_id"], {}, reply_to=msg["id"])
                     await ws.send(dump_message(done))
+                elif msg["type"] == "pair.code":
+                    if self.knows_codes:
+                        payload = {"code_hash": msg["payload"]["code_hash"]}
+                        ok = envelope(PairCodeOk, msg["room_id"], payload, reply_to=msg["id"])
+                    else:  # a relay from before 0.6.0
+                        payload = {"code": "forbidden_type", "message": "no"}
+                        ok = envelope(ErrorMsg, msg["room_id"], payload, reply_to=msg["id"])
+                    await ws.send(dump_message(ok))
         except ConnectionClosed:
             pass  # the PC dropped mid-reply (e.g. the test cancelled it)
         finally:
@@ -118,6 +129,7 @@ class Rig:
     statuses: list[Status]
     sleeps: list[float]
     task: asyncio.Task[None]
+    codes: PairCodes
 
 
 async def until(cond: Callable[[], bool], timeout: float = 5.0) -> None:
@@ -151,6 +163,7 @@ async def rig(relay: FakeRelay, env: AgentEnv, tmp_path: Path) -> AsyncIterator[
         sleeps.append(seconds)
         await asyncio.sleep(0.02)
 
+    codes = PairCodes()
     client = CloudRelayClient(
         url=relay.url,
         store=store,
@@ -161,9 +174,10 @@ async def rig(relay: FakeRelay, env: AgentEnv, tmp_path: Path) -> AsyncIterator[
         rng=lambda: 1.0,
         stable_after_s=0.2,
         ping_interval_s=3600,
+        pair_codes=codes,
     )
     task = asyncio.create_task(client.run())
-    yield Rig(client, service, store, statuses, sleeps, task)
+    yield Rig(client, service, store, statuses, sleeps, task, codes)
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
     await service.stop()
@@ -489,3 +503,66 @@ async def test_touchpad_keyboard_and_text_typing_reach_the_pc_over_the_relay(
     await until(lambda: os_ctl.typed == ["hello"])  # type: ignore[attr-defined]
     assert os_ctl.pointer_log == [("move", 7, -2), ("action", "click")]  # type: ignore[attr-defined]
     assert os_ctl.pressed == [("left", ("alt",))]  # type: ignore[attr-defined]
+
+
+# --------------------------------------------------------------------------- pairing codes
+async def test_the_tv_shows_a_code_once_the_relay_has_it(rig: Rig, relay: FakeRelay) -> None:
+    await until(lambda: "state.snapshot" in relay.types())
+    assert rig.codes.shown(need_relay=True) is None  # asked for: registered, not confirmed yet
+    await until(lambda: "pair.code" in relay.types())
+    sent = next(m for m in relay.received if m["type"] == "pair.code")
+    shown = await _wait_shown(rig.codes)
+    assert sent["payload"] == {"code_hash": code_hash(shown), "expires_s": 600}
+    assert shown.replace("-", "") not in json.dumps(relay.received)  # only the hash travels
+
+
+async def test_an_old_relay_means_no_code_on_the_tv(rig: Rig, relay: FakeRelay) -> None:
+    relay.knows_codes = False
+    await until(lambda: "state.snapshot" in relay.types())
+    rig.codes.shown(need_relay=True)
+    await until(lambda: "pair.code" in relay.types())
+    await asyncio.sleep(0.1)
+    assert rig.codes.shown(need_relay=True) is None
+    assert rig.codes.shown(need_relay=False) is not None  # the LAN can still use it
+
+
+async def test_a_new_phone_uses_the_code_up(rig: Rig, relay: FakeRelay) -> None:
+    room = rig.store.identity.room_id
+    await until(lambda: "state.snapshot" in relay.types())
+    await relay.push(_presence(room, online=True))  # the phones already paired
+    first = await _wait_shown(rig.codes)
+    friend = {"device_id": "dev-2", "name": "Bo", "online": True, "last_seen": 1.0}
+    old = {"device_id": "dev-1", "name": "Ann", "online": True, "last_seen": 1.0}
+    await relay.push(envelope(Presence, room, {"devices": [old, friend], "pc_online": True}))
+    await until(lambda: rig.codes.shown(need_relay=False) != first)
+    assert await _wait_shown(rig.codes) != first
+    hashes = [m["payload"]["code_hash"] for m in relay.received if m["type"] == "pair.code"]
+    assert len(set(hashes)) == 2
+
+
+async def test_a_code_is_announced_again_after_a_reconnect(rig: Rig, relay: FakeRelay) -> None:
+    await until(lambda: "state.snapshot" in relay.types())
+    shown = await _wait_shown(rig.codes)
+    count = relay.types().count("pair.code")
+    await relay.drop_all()
+    await until(lambda: relay.types().count("pair.code") > count)
+    last = [m for m in relay.received if m["type"] == "pair.code"][-1]
+    assert last["payload"]["code_hash"] == code_hash(shown)
+
+
+async def _wait_shown(codes: PairCodes) -> str:
+    shown: list[str] = []
+
+    def ready() -> bool:
+        code = codes.shown(need_relay=True)
+        if code:
+            shown.append(code)
+        return bool(code)
+
+    await until(ready)
+    return shown[-1]
+
+
+def test_pair_code_ok_is_a_relay_message() -> None:
+    ok = parse_message(dump_message(envelope(PairCodeOk, "r", {"code_hash": "a" * 64})))
+    assert isinstance(ok, PairCodeOk)

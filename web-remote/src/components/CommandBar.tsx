@@ -1,12 +1,13 @@
-import { useState } from "react";
-import { formatElapsed, type MicMode, type Voice } from "../hooks/useVoice";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { formatElapsed, type MicMode } from "../hooks/useVoice";
+import { AUTO_SEND_MS, type Speech } from "../hooks/useSpeech";
 import { MAX_RECORDING_MS } from "../utils/audioRecorder";
 import { Icon } from "./Icon";
 
 interface Props {
   /** The connection is not up: typing still works, sending and the mic do not. */
   disabled: boolean;
-  voice: Voice;
+  voice: Speech;
   micMode: MicMode;
   onSend: (text: string) => boolean;
 }
@@ -16,14 +17,31 @@ const BARS = [10, 22, 34, 18, 40, 26, 12, 30, 20, 36, 14, 24, 8];
 /**
  * The one place to give a command: type it or say it. It lives in a dock at the bottom so the
  * thumb reaches it, stays one row tall until you talk, and only then grows into a short
- * "listening" panel instead of taking over the screen.
+ * "listening" panel that shows the words as they are heard.
  */
 export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
   const [text, setText] = useState("");
-  const hold = micMode === "hold";
-  const micLabel = hold ? "Hold to talk" : "Tap to talk";
+  const input = useRef<HTMLInputElement | null>(null);
+  const hold = micMode === "hold" && voice.engine !== "keyboard";
+  const micLabel = voice.engine === "keyboard" ? "Dictate with the keyboard" : hold ? "Hold to talk" : "Tap to talk";
+
+  // Keyboard dictation: once the words stop changing for a moment, send them (no Enter needed).
+  const pending = voice.armed && text.trim() !== "";
+  const latest = useRef({ onSend, disarm: voice.disarm });
+  useEffect(() => {
+    latest.current = { onSend, disarm: voice.disarm };
+  });
+  useEffect(() => {
+    if (!pending || disabled) return;
+    const id = setTimeout(() => {
+      if (latest.current.onSend(text)) setText("");
+      latest.current.disarm();
+    }, AUTO_SEND_MS);
+    return () => clearTimeout(id); // more words arrived: wait again
+  }, [pending, disabled, text]);
 
   if (voice.active) {
+    const live = voice.engine === "speech";
     return (
       <Dock>
         <div className="rounded-3xl bg-surface p-4 ring-1 ring-rose-400/30" role="group" aria-label="Listening">
@@ -33,18 +51,20 @@ export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
               Listening
             </p>
             <p className="text-xs tabular-nums text-muted">
-              {formatElapsed(voice.elapsedMs)} of {formatElapsed(MAX_RECORDING_MS)}
+              {live ? "Sends when you stop talking" : `${formatElapsed(voice.elapsedMs)} of ${formatElapsed(MAX_RECORDING_MS)}`}
             </p>
           </div>
-          <div className="mt-3 flex h-11 items-center justify-center gap-1" aria-hidden>
-            {BARS.map((h, i) => (
-              <span
-                key={i}
-                className="w-1 animate-pulse rounded-full bg-rose-400"
-                style={{ height: h, animationDelay: `${i * 90}ms` }}
-              />
-            ))}
-          </div>
+          {live && voice.interim ? (
+            <p className="mt-3 min-h-11 text-[17px] leading-snug text-zinc-100" aria-live="polite">
+              {voice.interim}
+            </p>
+          ) : (
+            <div className="mt-3 flex h-11 items-center justify-center gap-1" aria-hidden>
+              {BARS.map((h, i) => (
+                <span key={i} className="w-1 animate-pulse rounded-full bg-rose-400" style={{ height: h, animationDelay: `${i * 90}ms` }} />
+              ))}
+            </div>
+          )}
           {hold ? (
             <p className="mt-3 text-center text-sm text-muted">Release to send</p>
           ) : (
@@ -59,11 +79,11 @@ export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
               <button
                 type="button"
                 onClick={voice.toggle}
-                aria-label="Send recording"
+                aria-label={live ? "Send now" : "Send recording"}
                 className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-rose-400 text-[15px] font-bold text-ink active:bg-rose-300"
               >
-                <Icon name="stop" size={18} />
-                Tap to send
+                <Icon name={live ? "send" : "stop"} size={18} />
+                {live ? "Send now" : "Tap to send"}
               </button>
             </div>
           )}
@@ -75,21 +95,32 @@ export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
   const hasText = text.trim() !== "";
   return (
     <Dock>
-      {!voice.supported && (
-        <p className="mb-2 px-2 text-center text-xs text-muted">Voice needs a secure (https) connection. Type instead.</p>
+      {voice.armed && (
+        <p className="mb-2 flex items-center justify-center gap-2 px-2 text-center text-xs text-accent" role="status">
+          {pending ? "Sending when you stop…" : "Tap the mic on your keyboard and speak"}
+          <button type="button" onClick={voice.disarm} className="press min-h-8 rounded-full px-2 text-muted underline underline-offset-2">
+            cancel
+          </button>
+        </p>
       )}
+      {!voice.supported && <p className="mb-2 px-2 text-center text-xs text-muted">Voice needs a secure (https) connection. Type instead.</p>}
       <form
         className="flex items-center gap-2.5"
         onSubmit={(e) => {
           e.preventDefault();
           if (onSend(text)) setText("");
+          voice.disarm();
         }}
       >
         <input
+          ref={input}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onBlur={() => {
+            if (!text.trim()) voice.disarm(); // the keyboard closed without words: not waiting any more
+          }}
           maxLength={500}
-          placeholder="Say or type a command"
+          placeholder={voice.armed ? "Listening through the keyboard…" : "Say or type a command"}
           aria-label="Type a command"
           enterKeyHint="send"
           autoCapitalize="none"
@@ -100,7 +131,9 @@ export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
             type="submit"
             disabled={disabled}
             aria-label="Send"
-            className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-accent text-ink active:brightness-90 disabled:opacity-40"
+            className={`relative flex h-14 w-14 flex-none items-center justify-center rounded-full bg-accent text-ink active:brightness-90 disabled:opacity-40 ${pending ? "countdown" : ""}`}
+            style={pending ? ({ "--wait": `${AUTO_SEND_MS}ms` } as CSSProperties) : undefined}
+            key={pending ? `wait-${text}` : "send"} // restart the ring when the words change
           >
             <Icon name="send" size={24} />
           </button>
@@ -110,13 +143,22 @@ export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
             disabled={disabled || !voice.supported}
             aria-label={micLabel}
             title={voice.supported ? micLabel : "Voice needs a secure (https) connection"}
-            onClick={hold ? undefined : voice.toggle}
+            onClick={
+              hold
+                ? undefined
+                : () => {
+                    if (voice.engine === "keyboard") {
+                      input.current?.focus(); // inside the tap, or iOS will not show the keyboard
+                      voice.arm();
+                    } else voice.toggle();
+                  }
+            }
             onPointerDown={hold ? voice.holdStart : undefined}
             onPointerUp={hold ? voice.holdEnd : undefined}
             onPointerCancel={hold ? voice.holdEnd : undefined}
             onContextMenu={(e) => e.preventDefault()}
             style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none" }}
-            className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-accent text-ink active:brightness-90 disabled:opacity-40"
+            className={`flex h-14 w-14 flex-none items-center justify-center rounded-full text-ink active:brightness-90 disabled:opacity-40 ${voice.armed ? "bg-rose-400" : "bg-accent"}`}
           >
             <Icon name="mic" size={24} />
           </button>

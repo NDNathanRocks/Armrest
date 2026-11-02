@@ -62,6 +62,7 @@ class RuntimeBackend:
         cloud = self._cloud()
         relay = getattr(cloud, "status", None) if cloud is not None else None
         self._health.gemini_key = self._settings.gemini_api_key is not None
+        self._health.groq_key = self._settings.groq_api_key is not None
         devices = self._service.state.state.devices
         self._last_rows = rows(
             self._health,

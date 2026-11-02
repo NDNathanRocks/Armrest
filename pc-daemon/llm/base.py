@@ -34,7 +34,7 @@ _BRAIN_MESSAGES = {
     "model_missing": "My brain is missing its model. Run Set up AI brain from the Start menu.",
     "timeout": "My brain took too long to answer. Try again, or add a Gemini key for speed.",
     "rate_limited": "My brain is busy right now (rate limit). Try again in a minute.",
-    "bad_key": "My Gemini key was rejected. Check the Gemini key in Settings.",
+    "bad_key": "My AI key was rejected. Check the Gemini and Groq keys in Settings.",
     "bad_reply": "My brain gave an answer I could not read. Try again.",
 }
 

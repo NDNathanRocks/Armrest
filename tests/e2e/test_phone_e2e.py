@@ -353,12 +353,14 @@ def test_text_zoom_and_long_content_do_not_break_the_layout(
 def test_voice_degrades_gracefully_without_a_secure_context(
     phone: PhoneFactory, daemon: Daemon
 ) -> None:
-    """On the LAN (plain http://192.168.x.x) browsers hide the microphone API entirely."""
+    """On the LAN (plain http://192.168.x.x) browsers hide the microphone API entirely: the mic
+    falls back to the keyboard's own dictation, which needs no microphone permission."""
     page = phone()
     page.add_init_script("Object.defineProperty(navigator, 'mediaDevices', {value: undefined})")
     pair(page, daemon)
-    assert page.get_by_role("button", name="Tap to talk").is_disabled()
-    expect(page.get_by_text("secure (https)")).to_be_visible()
-    page.get_by_label("Type a command").fill("pause")  # the text path still works
-    page.get_by_role("button", name="Send").click()
+    mic = page.get_by_role("button", name="Dictate with the keyboard")
+    expect(mic).to_be_enabled()
+    mic.click()
+    expect(page.get_by_text("Tap the mic on your keyboard")).to_be_visible()
+    page.get_by_label("Type a command").fill("pause")  # what dictation would type; no Enter
     expect(page.get_by_text("Done").first).to_be_visible(timeout=10_000)

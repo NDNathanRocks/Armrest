@@ -54,6 +54,8 @@ StepOp = Literal[
     "choose",
     "press_key",
     "speed",  # playback speed: {"rate": 1.25} or {"delta": 0.25}
+    "power",  # {"action": lock|sleep|shutdown|cancel_shutdown}: the user's words, owners only
+    "open_url",  # {"url": ...}: a link the user shared or pasted on the phone
 ]
 
 Tier = Literal["dom", "js", "vision", "os"]

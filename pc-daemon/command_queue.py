@@ -15,7 +15,7 @@ from collections.abc import Awaitable, Callable
 from enum import IntEnum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from contracts import CmdResultPayload, QuickAction
 
@@ -35,6 +35,7 @@ class CommandRequest(BaseModel):
     kind: Literal["button", "text", "voice"]
     text: str | None = None
     action: QuickAction | None = None
+    args: dict[str, str | int | float | bool] = Field(default_factory=dict)  # open_url's url
     priority: Priority | None = None
 
     def effective_priority(self) -> Priority:

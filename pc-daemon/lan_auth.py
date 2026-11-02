@@ -17,6 +17,7 @@ from collections.abc import Callable
 import jwt
 
 from contracts import PairGrantedPayload
+from pair_codes import PairCodes
 from room import RoomStore, sha256_hex
 
 ISSUER = "couch-jarvis"  # still issued: CouchJarvis (<= 0.4) PCs accept only this one
@@ -29,8 +30,14 @@ LOCKOUT_WINDOW_S = 60.0
 
 
 class LanAuth:
-    def __init__(self, store: RoomStore, clock: Callable[[], float] = time.time) -> None:
+    def __init__(
+        self,
+        store: RoomStore,
+        codes: PairCodes | None = None,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
         self._store = store
+        self._codes = codes
         self._clock = clock
         self._failures: deque[float] = deque()
 
@@ -87,6 +94,24 @@ class LanAuth:
         if not hmac.compare_digest(sha256_hex(room_secret), ident.room_secret_hash):
             self._failures.append(self._clock())
             return None
+        return self._grant()
+
+    def pair_with_code(self, code: str, device_name: str) -> PairGrantedPayload | None:
+        """The short code shown under the QR (pair_codes.py): it works once."""
+        ident = self._store.identity
+        if self._codes is None or ident.room_key is None or not 0 < len(device_name) <= 64:
+            return None
+        if self._locked_out():  # the same budget as wrong QR secrets: guessing stays slow
+            return None
+        if not self._codes.check(code):
+            self._failures.append(self._clock())
+            return None
+        granted = self._grant()
+        return granted.model_copy(update={"room_id": ident.room_id})
+
+    def _grant(self) -> PairGrantedPayload:
+        ident = self._store.identity
+        assert ident.room_key is not None
         now = self._clock()
         device_id = f"lan-{secrets.token_hex(6)}"
         claims = {

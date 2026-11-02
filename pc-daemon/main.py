@@ -56,6 +56,7 @@ from licensing import Licence, LicenceFile, LicenceManager, is_preview
 from llm.base import TextLLM, VisionLLM
 from llm.fake import DryRunRouter
 from local_api import create_app
+from pair_codes import PairCodes
 from roles import RoleStore
 from room import RoomStore
 from service import CommandService
@@ -87,25 +88,46 @@ class Runtime:
     tray: object | None = None
     health: Health = field(default_factory=Health)  # what the Control Center's Status page shows
     control: object | None = None  # the Control Center (keeps its windows alive)
+    pair_codes: PairCodes = field(default_factory=PairCodes)  # the short code under the QR
 
 
 def build_llms(settings: Settings) -> tuple[TextLLM, VisionLLM]:
-    """Text router and screen-reading model, preferred provider first, the other as fallback."""
+    """Text router and screen-reading model, preferred provider first, the others as fallback.
+
+    Text: Gemini, then Groq, then this PC (Groq first with ``router_provider=groq``; this PC
+    only with ``ollama``). The screen reader: Gemini, then the local vision model (Groq is text
+    only here).
+    """
     from hardware import text_model
     from llm.fallback import FallbackLLM
     from llm.gemini import GeminiClient
+    from llm.groq import GroqClient
     from llm.ollama import OllamaClient
 
     local_text = OllamaClient(settings.ollama_url, text_model(settings.ollama_text_model))
     local_vlm = OllamaClient(settings.ollama_url, settings.ollama_vlm_model, timeout_s=90.0)
-    if settings.gemini_api_key is None:
-        return local_text, local_vlm
-    cloud = GeminiClient(settings.gemini_api_key.get_secret_value())
-    if (
-        settings.router_provider == "ollama"
-    ):  # local first, the cloud key only for the screen reader
-        return local_text, FallbackLLM([cloud, local_vlm])
-    return FallbackLLM([cloud, local_text]), FallbackLLM([cloud, local_vlm])
+    groq = (
+        GroqClient(settings.groq_api_key.get_secret_value(), settings.groq_text_model)
+        if settings.groq_api_key is not None
+        else None
+    )
+    gemini = (
+        # with Groq behind it, retry a rate limit once instead of waiting 7 s for Gemini
+        GeminiClient(settings.gemini_api_key.get_secret_value(), max_attempts=2 if groq else 3)
+        if settings.gemini_api_key is not None
+        else None
+    )
+    if settings.router_provider == "ollama":  # commands stay on this PC
+        text: list[TextLLM] = [local_text]
+    elif settings.router_provider == "groq":
+        text = [p for p in (groq, gemini) if p is not None] + [local_text]
+    else:
+        text = [p for p in (gemini, groq) if p is not None] + [local_text]
+    vision: list[VisionLLM] = [gemini, local_vlm] if gemini is not None else [local_vlm]
+    return (
+        text[0] if len(text) == 1 else FallbackLLM(text),
+        vision[0] if len(vision) == 1 else FallbackLLM(vision),
+    )
 
 
 async def prepare_brain(settings: Settings, health: Health | None = None) -> None:
@@ -115,6 +137,7 @@ async def prepare_brain(settings: Settings, health: Health | None = None) -> Non
 
     health = health or Health()
     health.gemini_key = settings.gemini_api_key is not None
+    health.groq_key = settings.groq_api_key is not None
     try:
         status = await prepare_ollama(settings.ollama_url, text_model(settings.ollama_text_model))
     except Exception:  # a warm-up must never take the daemon down
@@ -125,8 +148,8 @@ async def prepare_brain(settings: Settings, health: Health | None = None) -> Non
     health.brain_detail = f"Ready ({status.detail})." if status.usable else status.detail
     if status.usable:
         log.info("brain ready: %s", status.detail)
-    elif settings.gemini_api_key is not None:
-        log.info("local brain unavailable (%s); using the Gemini key", status.state)
+    elif settings.gemini_api_key is not None or settings.groq_api_key is not None:
+        log.info("local brain unavailable (%s); using the cloud key", status.state)
     else:
         log.warning(
             "brain %s (%s): free-form commands will not work until you run Set up AI brain "
@@ -229,6 +252,10 @@ def build_runtime(settings: Settings, *, dry_run: bool) -> Runtime:
     deps.memory = ConversationMemory(None if dry_run else settings.memory_file)
     deps.subtitles = SubtitleController(browser, grounder, os_ctl)
     deps.subtitle_lang = settings.subtitle_lang.strip().lower() or "en"
+    if not dry_run:
+        from media_sessions import windows_media_sessions
+
+        deps.media_apps = windows_media_sessions()  # Spotify, VLC... (None: media keys only)
     service_ref: list[CommandService] = []
 
     async def on_timer(info: TimerInfo) -> None:
@@ -271,6 +298,7 @@ def build_runtime(settings: Settings, *, dry_run: bool) -> Runtime:
         stt=stt,
         mode="lan" if dry_run else "cloud",
         remote_input=settings.remote_input,
+        media_apps=deps.media_apps,
     )
     service_ref.append(service)
     if not dry_run:
@@ -333,7 +361,7 @@ async def amain(args: argparse.Namespace) -> None:
 
     host = "127.0.0.1" if args.dry_run else settings.lan_host
     port = args.port or settings.lan_port
-    lan_auth = LanAuth(rt.room_store) if rt.room_store is not None else None
+    lan_auth = LanAuth(rt.room_store, rt.pair_codes) if rt.room_store is not None else None
     if lan_auth is not None:
         rt.service.on_revoke = lan_auth.revoke
         rt.service.revoked |= set(rt.room_store.identity.revoked)  # type: ignore[union-attr]
@@ -342,6 +370,7 @@ async def amain(args: argparse.Namespace) -> None:
         rt.telemetry,
         token_verifier=lan_auth.verify_token if lan_auth else None,
         pairing=lan_auth.pair if lan_auth else None,
+        code_pairing=lan_auth.pair_with_code if lan_auth else None,
         allowed_origins=[
             qr_base_url(settings.pwa_base_url),
             f"http://localhost:{port}",
@@ -401,6 +430,7 @@ async def amain(args: argparse.Namespace) -> None:
             bus=rt.bus,
             telemetry=rt.telemetry,
             on_status=on_cloud_status,
+            pair_codes=rt.pair_codes,
         )
         rt.cloud = cloud
         background.append(asyncio.create_task(cloud.run(), name="cloud-relay"))
@@ -503,7 +533,18 @@ def start_hud(rt: Runtime, settings: Settings, host: str, port: int) -> asyncio.
         scheme = "https" if settings.lan_tls_enabled else "http"
         return store.identity.pairing_url(f"{scheme}://{ip}:{port}") if ip else None
 
-    vm = HudViewModel(cloud_url=cloud_url, lan_url=lan_url, badge_hide_s=settings.hud_badge_hide_s)
+    codes = rt.pair_codes
+
+    def pair_code(transport: str) -> str | None:
+        # through the cloud only once the relay confirmed it; on the LAN the PC checks it itself
+        return codes.shown(need_relay=transport == "cloud")
+
+    vm = HudViewModel(
+        cloud_url=cloud_url,
+        lan_url=lan_url,
+        badge_hide_s=settings.hud_badge_hide_s,
+        pair_code=pair_code,
+    )
     overlay = TvOverlay(vm, settings.hud_screen_index)
     overlay.show()
 

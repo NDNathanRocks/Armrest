@@ -356,3 +356,65 @@ describe("shutdown", () => {
     expect(r.conn.sendButton("next")).toBe(false);
   });
 });
+
+describe("pairing with the TV's short code", () => {
+  const granted = (extra: Record<string, unknown> = {}) =>
+    incoming("pair.granted", { device_id: "dev-9", device_token: "tok.9", expires_at: 2_000_000_000, ...extra });
+
+  it("connects with the code alone and learns its room from the relay", async () => {
+    const r = setup(null);
+    r.conn.startWithCode("K7QM4XPA");
+    const sock = FakeSocket.last;
+    const url = new URL(sock.url);
+    expect(url.searchParams.get("code")).toBe("K7QM4XPA");
+    expect(url.searchParams.get("pair")).toBe("1");
+    expect(url.searchParams.has("room")).toBe(false);
+    sock.open();
+    expect(sock.sent[0]).toMatchObject({ type: "pair.request", payload: { pair_code: "K7QM4XPA", device_name: "Pixel" } });
+    expect(sock.sent[0]?.["payload"]).not.toHaveProperty("room_secret");
+    sock.receive(granted({ room_id: "room-from-code1" }));
+    await flush();
+    expect(r.storage.saved).toMatchObject({ roomId: "room-from-code1", deviceId: "dev-9", deviceToken: "tok.9" });
+    expect(r.paired).toHaveLength(1);
+    expect(sock.types()).toContain("state.sync"); // then asks for the TV state like a QR pairing
+  });
+
+  it("a refused code is never retried, says so, and goes back to the TV this phone had", async () => {
+    const r = setup(saved);
+    r.conn.startWithCode("AAAA2222");
+    FakeSocket.last.drop(1006); // the relay refused the handshake (wrong / used / expired code)
+    await flush();
+    const toast = r.actions.find((a) => a.type === "toast") as { toast: { text: string } } | undefined;
+    expect(toast?.toast.text).toMatch(/code didn't work/);
+    expect(new URL(FakeSocket.last.url).searchParams.get("token")).toBe("tok.en.1"); // the saved TV again
+    r.advance(120_000);
+    expect(FakeSocket.instances.filter((s) => s.url.includes("code="))).toHaveLength(1);
+  });
+
+  it("without a saved TV, a refused code leaves the pairing page up", async () => {
+    const r = setup(null);
+    r.conn.startWithCode("AAAA2222");
+    FakeSocket.last.open();
+    FakeSocket.last.receive(incoming("pair.denied", { reason: "invalid_code" }));
+    await flush();
+    expect(connections(r).at(-1)).toBe("idle");
+    expect(r.unpaired).toHaveLength(0); // nothing was unpaired: there was nothing
+  });
+
+  it("sends a link to open with the button", async () => {
+    const r = setup();
+    await r.conn.start(null);
+    FakeSocket.last.open();
+    expect(r.conn.sendButton("open_url", { url: "https://youtu.be/abc" })).toBe(true);
+    expect(FakeSocket.last.sent.at(-1)).toMatchObject({ type: "cmd.button", payload: { action: "open_url", args: { url: "https://youtu.be/abc" } } });
+  });
+});
+
+describe("normalizeCode", () => {
+  it("accepts what people type and refuses what cannot be a code", async () => {
+    const { normalizeCode } = await import("../connection/roomConnection");
+    expect(normalizeCode(" k7qm-4xpa ")).toBe("K7QM4XPA");
+    expect(normalizeCode("K7QM4XP")).toBeNull(); // too short
+    expect(normalizeCode("K7QM4XP0")).toBeNull(); // 0 is never used (it looks like O)
+  });
+});

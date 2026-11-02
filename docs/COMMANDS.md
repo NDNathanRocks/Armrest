@@ -1,7 +1,9 @@
 # Everything you can say
 
-Tap the mic on the phone, speak, then tap **Tap to send**. You can also type the same words in the bar. Prefer
-press-and-hold? Switch with the "Mic mode" link at the bottom of the Remote tab.
+Tap the mic on the phone and speak: your words appear in the bar and are sent when you stop talking. You can also
+type the same words. Prefer press-and-hold? Switch it under Settings → Microphone. On a phone whose browser can't
+listen, the mic opens the keyboard instead: tap the keyboard's own mic, and the command goes 1.5 seconds after you
+stop.
 
 The phrases below are understood on your PC straight away, without the AI helper. You don't need the exact words:
 "hey Armrest, please pause the video" works too. Anything that isn't listed goes to the AI helper (a free Gemini key
@@ -13,7 +15,7 @@ You can chain several: *"mute, new tab and play lofi on YouTube"*.
 
 | Say | What happens |
 |---|---|
-| "pause" · "stop" · "hold on" | Pauses |
+| "pause" · "stop" · "hold on" | Pauses (the TV browser, or Spotify, VLC and other apps when the browser isn't playing) |
 | "play" · "resume" · "continue" | Plays |
 | "next" · "skip this song" · "previous" | Next or previous video or track |
 | "skip ahead 30 seconds" · "forward a minute" · "rewind 20 seconds" · "go back 10 seconds" | Seeks (10 seconds if you don't say) |
@@ -40,6 +42,23 @@ You can chain several: *"mute, new tab and play lofi on YouTube"*.
 | "exit fullscreen" · "unfullscreen" · "leave full screen" · "minimise the video" | Back to the normal view, tabs included |
 | "turn on subtitles" · "subtitles off" · "Spanish subtitles" · "captions in German" | Subtitles in the language you name (English by default) |
 | "turn off the screen" | Blanks the TV without stopping anything |
+
+## The PC itself
+
+| Say | What happens |
+|---|---|
+| "lock the PC" · "lock the screen" | Locks Windows |
+| "put the PC to sleep" | Sleeps the PC. You can't wake it from the phone: use its power button or keyboard |
+| "shut down the PC" · "turn off the computer" | Shuts down in one minute |
+| "cancel the shutdown" · "don't shut down" | Stops that |
+
+These need your own words (the AI helper can't do them), and guest phones can't use them. The same buttons are in
+Settings → PC power on the phone. "Turn off the TV" only blanks the screen.
+
+## Links from your phone
+
+On Android, use **Share → Armrest** in YouTube, Netflix, a browser or any app, and the link opens on the TV. On any
+phone you can paste a link into the box at the top of the **Saved** tab.
 
 ## Finding things to watch
 

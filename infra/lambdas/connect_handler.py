@@ -4,6 +4,8 @@ PC:    ?room=<id>&role=pc  + headers  Authorization: Bearer <pc_key>, X-Room-Sec
        The first PC to present a new room id registers it (trust on first use).
 Phone: ?room=<id>&token=<device JWT>      (returning device)
        ?room=<id>&pair=1                  (new device; must then send pair.request)
+       ?code=<8-char code>&pair=1         (new device that typed the TV's code: the code names
+                                           the room; pair.request then repeats the code)
 Returning a non-2xx statusCode rejects the handshake.
 """
 
@@ -11,10 +13,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from typing import Any
 
 from common import auth
+from common.ddb import Store
 from common.models import HEX64_RE, ROOM_ID_RE
 from common.presence import broadcast_presence
 from common.runtime import get_gateway, get_store
@@ -26,6 +30,10 @@ log = logging.getLogger(__name__)
 # raises them for scripts/relay_load.py, which runs many homes from one machine).
 CONNECTS_PER_MINUTE = int(os.environ.get("CONNECTS_PER_MINUTE", "60"))
 NEW_ROOMS_PER_HOUR = int(os.environ.get("NEW_ROOMS_PER_HOUR", "5"))
+# A typed pairing code is short (about 39 bits) and lives 10 minutes: allow a few typos per IP,
+# never a guessing run.
+CODE_TRIES_PER_10_MIN = int(os.environ.get("CODE_TRIES_PER_10_MIN", "10"))
+CODE_RE = re.compile(r"^[A-HJ-NP-Z2-9]{8}$")  # pc-daemon/pair_codes.py ALPHABET
 
 
 def _reject(status: int, reason: str) -> dict[str, Any]:
@@ -43,7 +51,8 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
     query: dict[str, str] = event.get("queryStringParameters") or {}
     headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
     room_id = query.get("room", "")
-    if not ROOM_ID_RE.match(room_id):
+    code = query.get("code")
+    if code is None and not ROOM_ID_RE.match(room_id):
         return _reject(400, "bad room id")
 
     store = get_store()
@@ -51,6 +60,10 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
     ip = _source_ip(event)
     if ip is not None and store.bump_counter(f"ip#{ip}", 60) > CONNECTS_PER_MINUTE:
         return _reject(429, "too many connections")
+    if code is not None:
+        if role != "phone" or query.get("pair") != "1":
+            return _reject(400, "a code is only for pairing a phone")
+        return _connect_with_code(store, connection_id, code, ip)
 
     if role == "pc":
         bearer = headers.get("authorization", "")
@@ -106,3 +119,20 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
         store.put_connection(connection_id, room_id, "phone", None, authed=False)
         return {"statusCode": 200}
     return _reject(401, "token or pair=1 required")
+
+
+def _connect_with_code(
+    store: Store, connection_id: str, code: str, ip: str | None
+) -> dict[str, Any]:
+    """The code names the room. Counted per IP whether it is right or not (guessing is slow)."""
+    if ip is not None and store.bump_counter(f"code#{ip}", 600) > CODE_TRIES_PER_10_MIN:
+        return _reject(429, "too many codes")
+    normalized = "".join(ch for ch in code.upper() if ch.isalnum())
+    if not CODE_RE.match(normalized):
+        return _reject(400, "bad code")
+    hashed = auth.sha256_hex(normalized)
+    room_id = store.pair_code_room(hashed)
+    if room_id is None:
+        return _reject(403, "unknown or expired code")
+    store.put_connection(connection_id, room_id, "phone", None, authed=False, pair_code_hash=hashed)
+    return {"statusCode": 200}

@@ -28,6 +28,8 @@ from contracts import (
     InputKey,
     InputPointer,
     InputText,
+    PairCode,
+    PairCodeOk,
     Ping,
     Presence,
     RoomDelete,
@@ -39,6 +41,7 @@ from contracts import (
     parse_message,
 )
 from event_bus import EventBus
+from pair_codes import PairCodes
 from room import RoomStore
 from service import CommandService
 from telemetry import Telemetry
@@ -93,8 +96,11 @@ class CloudRelayClient:
         rng: Callable[[], float] = random.random,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
+        pair_codes: PairCodes | None = None,
     ) -> None:
         self._url = url
+        self._codes = pair_codes
+        self._known_devices: set[str] | None = None  # phone ids at the last presence
         self._store = store
         self._service = service
         self._bus = bus
@@ -192,6 +198,15 @@ class CloudRelayClient:
             self._set_status("up")
             await ws.send(dump_message(envelope(StateSync, room_id, {})))  # hello -> room.key
             await self._send_snapshot(ws)
+            if self._codes is not None:
+                loop = asyncio.get_running_loop()
+
+                def register(code_hash: str, expires_s: int) -> None:
+                    # called from the TV overlay's paint timer: send from the event loop
+                    loop.call_soon_threadsafe(self._send_code, ws, room_id, code_hash, expires_s)
+
+                self._codes.on_new = register
+                self._codes.announce()  # a code shown before this connection
             tasks = [
                 asyncio.create_task(self._receive(ws), name="relay-recv"),
                 asyncio.create_task(self._forward_events(ws), name="relay-send"),
@@ -207,6 +222,15 @@ class CloudRelayClient:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
     # ------------------------------------------------------------------ pumps
+
+    def _send_code(
+        self, ws: ClientConnection, room_id: str, code_hash: str, expires_s: int
+    ) -> None:
+        if ws is not self._ws:
+            return  # that connection is gone; the next one announces the code itself
+        msg = envelope(PairCode, room_id, {"code_hash": code_hash, "expires_s": expires_s})
+        task = asyncio.ensure_future(ws.send(dump_message(msg)))
+        task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
 
     async def _send_snapshot(self, ws: ClientConnection) -> None:
         await ws.send(dump_message(self._service.state.snapshot_message()))
@@ -245,8 +269,16 @@ class CloudRelayClient:
             elif isinstance(msg, RoomDeleted):
                 if self._deleted is not None and not self._deleted.done():
                     self._deleted.set_result(None)
+            elif isinstance(msg, PairCodeOk):
+                if self._codes is not None:
+                    self._codes.confirm(msg.payload.code_hash)
             elif isinstance(msg, Presence):
                 self.phones_online = any(d.online for d in msg.payload.devices)
+                ids = {d.device_id for d in msg.payload.devices}
+                known = self._known_devices
+                if self._codes is not None and known is not None and ids - known:
+                    self._codes.rotate()  # a phone just paired: that code is used up
+                self._known_devices = ids
                 if msg.payload.revoked:
                     self._store.add_revoked(msg.payload.revoked)  # keep LAN auth in step
                     for device_id in msg.payload.revoked:

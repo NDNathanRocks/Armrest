@@ -35,6 +35,13 @@ def tap_to_talk(page: Page, talk_ms: int) -> None:
 def test_a_real_browser_recording_survives_the_wire_and_decodes(phone, stub: StubServer) -> None:  # type: ignore[no-untyped-def]
     stub.start()
     page: Page = phone(permissions=["microphone"])
+    # The phone's own speech engine comes first (useSpeech); this test is about the recording
+    # fallback a browser without one uses, so take the engine away. The phone fixture has touch,
+    # which would pick keyboard dictation instead: say it has none.
+    page.add_init_script(
+        "delete window.SpeechRecognition; delete window.webkitSpeechRecognition;"
+        " Object.defineProperty(navigator, 'maxTouchPoints', {get: () => 0});"
+    )
     page.add_init_script(
         "localStorage.setItem('cj.pairing', JSON.stringify({roomId:'room-abcdef123', deviceId:'lan-x',"
         " deviceToken:'tok.en.x', expiresAt: 2000000000, deviceName:'Pixel'}))"

@@ -19,6 +19,7 @@ class Health:
     brain_state: str = "checking"  # brain.BrainStatus.state, or "checking"
     brain_detail: str = ""
     gemini_key: bool = False
+    groq_key: bool = False
     speech: Literal["loading", "ready", "failed", "off"] = "loading"
     speech_detail: str = ""
     notes: list[str] = field(default_factory=list)
@@ -75,8 +76,12 @@ def rows(
         out.append(Row("AI brain", "warn", "Starting..."))
     elif state in ("ready", "cloud"):
         out.append(Row("AI brain", "good", health.brain_detail or "Ready."))
-    elif health.gemini_key:
-        out.append(Row("AI brain", "good", "Using your Gemini key."))
+    elif health.gemini_key or health.groq_key:
+        keys = [
+            name for name, on in (("Gemini", health.gemini_key), ("Groq", health.groq_key)) if on
+        ]
+        plural = "s" if len(keys) > 1 else ""
+        out.append(Row("AI brain", "good", f"Using your {' and '.join(keys)} key{plural}."))
     else:
         missing = {
             "not_installed": "No AI is set up yet: buttons work, free-form commands do not.",

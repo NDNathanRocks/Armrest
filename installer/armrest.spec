@@ -30,6 +30,10 @@ hiddenimports += collect_submodules("winrt.windows.services.store") + [
     "winrt.windows.foundation",
     "winrt.windows.foundation.collections",
 ]
+# other media apps (media_sessions.py, imported lazily); their properties reference streams
+hiddenimports += collect_submodules("winrt.windows.media.control") + collect_submodules(
+    "winrt.windows.storage.streams"
+)
 
 web_dist = os.path.join(ROOT, "web-remote", "dist")
 if os.path.isdir(web_dist):

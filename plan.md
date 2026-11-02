@@ -878,6 +878,7 @@ can't tell), custom keyboard-shortcut favourites, playback speed / exit fullscre
 | 3 | Me (OK needed) | Deploy the relay: 5D + accept the `armrest` issuer, in one deploy (see 14.1 Relay) |
 | 4 | ~~Me~~ → User | ~~Full rename to Armrest (14.3)~~ Built as **0.5.0** (commits `7bec2f8`, `24f8fe5` and the docs commit). User: push, tag `v0.5.0`, publish `Armrest-Setup.exe` + `Armrest-portable-0.5.0.zip`, then install it on the TV PC and check the move (14.3 *Status*) |
 | 4b | User, then me | Rename the GitHub repo `couch-jarvis` → `armrest`; then I change `RELEASES_API`, `RELEASES_URL`, the README links and `git remote`, and drop them from `test_no_old_name.py`'s allow-list |
+| 4c | Me (OK needed) | **0.6.0** (section 15): built and tested; relay deploy, Cloudflare redeploy and installer build wait for the user |
 | 5 | User + me | **Pricing and payments** (14.4) |
 | 6 | Me | 5H leftovers: English + French (`t()` + a test that both dictionaries match), accessibility pass with axe, guest passes that expire after 24 h, "try the remote on this PC" (loopback pairing, for Store reviewers) |
 | 7 | Me | 5J packaging: version 1.0.0, exe version info, MSIX build with the Partner Center identity, MSIX→MSIX update test, Inno→Store migration, WACK, a clean PC in Windows Sandbox. Remove the test certificate `CN=CouchJarvisDev` afterwards (13.10) |
@@ -1015,3 +1016,58 @@ may use their own payment system, the free individual Partner Center registratio
    - On this PC: edit files with the Edit/Write tools. Bash heredocs break on apostrophes and backslashes, so put
      larger scripts in a scratch file. Some files are CRLF: keep their line endings.
 6. When work lands, update 14.1–14.5 (and `docs/RELEASE_NOTES_<version>.md` for a release).
+
+## 15. v0.6.0 plan (requested 2026-11-01): sharing, other media apps, PC power, Groq, more buttons, faster voice, easier pairing
+
+Request: build ideas 1, 3, 4 and 5 from the 2026-10-26 research (share to TV, other media apps, PC power, Groq as a
+backup brain), 8 more custom buttons on the Keys tab, a much faster mic, and an iPhone home-screen app that can pair.
+Decisions (user, 2026-11-01): the PC's speech recognition stays as a hidden fallback for one release, then goes; the
+typed pairing code goes into the waiting relay deploy; watching the TV on the phone is discussion only (not built).
+
+| # | Change | PC | Phone | Relay | Gate |
+|---|---|---|---|---|---|
+| 15A | **Groq backup brain**: `llm/groq.py` (OpenAI-compatible chat, JSON mode, 429 backoff). Text chain: Gemini → Groq → this PC (`auto`); `ARMREST_ROUTER_PROVIDER=groq` puts Groq first; `ARMREST_GROQ_TEXT_MODEL` (default `llama-3.3-70b-versatile`). The Groq key (already used for speech) is the user's own | yes | — | — | pytest (MockTransport) |
+| 15B | **PC power**: `pc_lock`, `pc_sleep`, `pc_shutdown` (60 s countdown on the TV), `pc_cancel_shutdown` buttons; voice "lock the PC", "put the PC to sleep", "shut down the PC", "cancel the shutdown". New `power` step: user's words only (never model output), owners only (guests refused). Phone: a *PC power* row in Settings with a confirm for sleep/shutdown, hidden for guests and PCs < 0.6.0 | yes | yes | — | pytest, vitest |
+| 15C | **Other media apps** (Spotify, VLC, Windows Media Player…) through Windows' media sessions (`winrt-Windows.Media.Control`): when the TV browser has no media, Now Playing shows the app's title, artist, position and app name (`NowPlaying.app`, additive); play/pause/next/prev go to that app's session before the blind media key; the timeline slider seeks it when the app allows | yes | yes (app name) | — | pytest with a fake session manager; probe on this PC |
+| 15D | **Share to TV**: manifest `share_target` (Android) → `/share?url=…` opens the link on the TV in the current tab; a *Open a link* box in the Saved tab (iPhone: paste). New `open_url` button (args `url`, http/https only, ≤ 2000 chars; guests only for the media allow-list) | yes | yes | — | pytest, vitest |
+| 15E | **8 more buttons** at the top of the Keys tab: a second favourites grid with its own slots (`cj.favorites.keys.v1`), the same library and custom shortcuts, plus a new **custom command** button kind (a saved phrase, e.g. "open my bookmark netflix") usable in both grids | — | yes | — | vitest |
+| 15F | **Fast voice**: the mic uses the phone's own speech engine (Web Speech API: Siri / Google dictation); words appear live in the command bar and are sent when you stop talking. Without it (Firefox, some home-screen apps) the mic focuses the bar for keyboard dictation and sends 1.5 s after the text stops changing (a countdown ring; typing or tapping cancels). The old recording path stays only as a fallback where neither works; spoken answers to questions use the new mic | — | yes | — | vitest with a fake SpeechRecognition |
+| 15G | **iPhone home-screen pairing**: (a) *Scan the TV code* in the app (camera via `getUserMedia`; `BarcodeDetector` or lazy-loaded `jsqr`), (b) a short code on the TV (`K7QM-4XPA`, 8 characters, 10 minutes, one use) typed into the app, (c) an *Add to Home Screen* guide in iPhone Safari. The code: the PC registers `sha256(code)` with a new PC → relay `pair.code` message (reply `pair.code.ok`; an old relay answers `forbidden_type`, so the TV only shows the code once the relay knows it); the phone connects with `?code=…&pair=1` and sends `pair.request` with `pair_code`; the relay consumes the code (conditional delete), grants a token and returns `room_id`. Per-IP limit on code tries. Permissions-Policy allows `camera=(self)` | yes | yes | **yes** (joins the waiting 5D deploy) | pytest + tests/infra (moto), vitest |
+| 15H | Release: version 0.6.0, docs (COMMANDS, INSTALL settings table, README), release notes, plan 14 status; full checks; upgrade test from 0.5.0 before the tag | | | | release gate |
+
+Contract changes (additive): `QuickAction` + `pc_lock`, `pc_sleep`, `pc_shutdown`, `pc_cancel_shutdown`, `open_url`;
+`NowPlaying.app: str | None`; `PairRequestPayload.room_secret` defaults to `""` and gains `pair_code`;
+`PairGrantedPayload.room_id: str | None`; PC → relay `pair.code` / relay → PC `pair.code.ok`; `RoomState.pair_code_ttl`
+is not needed (the code is shown on the TV only). The phone hides every new control from PCs older than 0.6.0
+(`POWER_SINCE`).
+
+Risks: Web Speech on iPhone needs a network (Apple's servers) and asks for permission once; a home-screen app on some
+iOS versions may not offer it, hence the keyboard fallback. `share_target` works on Android only. Windows media
+sessions vary by app (some do not report position or allow seeking). Sleep cannot be undone from the phone (no
+wake-on-LAN from a browser), so the phone says so before it sleeps the PC.
+
+**Status (2026-11-02): 15A–15G built as 0.6.0, not committed yet.** Details:
+- 15A `llm/groq.py`; `build_llms` order tested (`test_build_llms.py`); Gemini retries once (not 3x) when Groq is behind it.
+- 15B `WindowsOS.power` (LockWorkStation; SetSuspendState 3 s after answering; `shutdown /s /t 60` and `/a`).
+  `power` and `open_url` are user-only ops; guests are refused power and non-media links.
+- 15C `media_sessions.py` (winrt `Windows.Media.Control`; Edge's own session is skipped). Probed on this PC.
+- 15D `open_url` reuses `open_saved` (http/https only, no userinfo). Phone: manifest `share_target` → `/share`,
+  and an *Open a link* box in the Saved tab (PC ≥ 0.6.0).
+- 15E second grid `cj.favorites.keys.v1` on the Keys tab, plus custom *command* buttons (`kind: "say"`).
+- 15F `hooks/useSpeech.ts` (speech → keyboard → record). The PC STT path is untouched and only used by `record`.
+- 15G `pair_codes.py`, relay `pair.code` / `?code=` connect / `pair_code` in `pair.request` (one try per socket, 10
+  tries per IP per 10 min, conditional delete = one use), LAN check through `LanAuth.pair_with_code`. Phone: in-app
+  scanner (`BarcodeDetector`, else lazy `jsqr`), code box, iPhone home-screen guide, *Add another TV* in Settings.
+- Checks: `pytest -m ""` 1,182 passed after the e2e voice fixes (the speech engine now needs a secure page; the
+  recording e2e forces the fallback); the Edge integration tests `test_duplicate_then_follow…` and the subtitle ones
+  fail 1–2 of 26 per run, the same on the committed 0.5.0 code (flaky, not a regression). 243 web tests, ruff,
+  mypy --strict, eslint, tsc, contracts, legal pages, licence gate (jsqr Apache-2.0, winrt media MIT): all green.
+  The TV overlay with the code was rendered and checked; the landing and code screens at 390 px too.
+- **To do before release (user OK needed):** the combined relay deploy (5D + issuers + pair codes); phone app
+  redeploy to Cloudflare; build the 0.6.0 installer, upgrade test from 0.5.0, then push/tag. Real-device checks:
+  Web Speech in an iPhone home-screen app, scanning the TV QR with an iPhone, Android share menu, Spotify control.
+
+**Watching the TV on the phone (discussion, not built).** A live mirror needs WebRTC from the PC; Netflix, Disney+
+and Prime show black frames when captured (DRM); away from home Wi-Fi it needs a TURN relay (a running cost); and
+encoding video loads the PC while it plays. A cheap alternative for later: *Continue on phone* for YouTube / YouTube
+Music (open the same video at the same second on the phone and pause the TV).

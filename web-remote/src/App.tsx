@@ -8,6 +8,7 @@ import { KeyPad } from "./components/KeyPad";
 import { LogPanel } from "./components/LogPanel";
 import { NowPlayingCard } from "./components/NowPlayingCard";
 import { QRScanner, readPairParams, stripPairParams } from "./components/QRScanner";
+import type { PairParams } from "./connection/roomConnection";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { APP_NAME } from "./brand";
 import { AppsRow } from "./components/AppsRow";
@@ -19,16 +20,21 @@ import { Toasts } from "./components/Toasts";
 import { TouchPad } from "./components/TouchPad";
 import { Transport } from "./components/Transport";
 import { VolumeSlider } from "./components/VolumeSlider";
+import { HomeScreenGuide } from "./components/HomeScreenGuide";
+import { OpenLink } from "./components/OpenLink";
 import { useRoomSocket } from "./hooks/useRoomSocket";
-import { loadMicMode, saveMicMode, useVoice, type MicMode } from "./hooks/useVoice";
+import { useSpeech } from "./hooks/useSpeech";
+import { loadMicMode, saveMicMode, type MicMode } from "./hooks/useVoice";
 import { selectDevices } from "./state/roomReducer";
 import { resolveEndpoint } from "./utils/config";
-import { loadFavorites, saveFavorites, type Fav } from "./utils/favorites";
+import { loadFavorites, saveFavorites, type Fav, type Grid } from "./utils/favorites";
 import { tap } from "./utils/haptics";
+import { dismissGuide, guideDismissed, wantsHomeScreenGuide } from "./utils/install";
+import { clearSharedLink, linkHost, readSharedLink } from "./utils/links";
 import { loadRecents, rememberCommand } from "./utils/recents";
 import { browserPairingStorage, type Pairing } from "./utils/storage";
 import { forgetTv, loadTvs, rememberTv, renameTv, type Tv } from "./utils/tvs";
-import { APPS_SINCE, SLIDERS_SINCE, versionAtLeast } from "./utils/version";
+import { APPS_SINCE, POWER_SINCE, SHARE_SINCE, SLIDERS_SINCE, versionAtLeast } from "./utils/version";
 
 type Tab = "remote" | "saved" | "keys";
 const TABS: readonly { id: Tab; label: string; aria?: string }[] = [
@@ -54,28 +60,40 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recents, setRecents] = useState<string[]>(loadRecents);
   const [micMode, setMicMode] = useState<MicMode>(loadMicMode);
-  const [favorites, setFavorites] = useState<(string | null)[]>(loadFavorites);
+  const [favorites, setFavorites] = useState<(string | null)[]>(() => loadFavorites("remote"));
+  const [keyFavorites, setKeyFavorites] = useState<(string | null)[]>(() => loadFavorites("keys"));
   const [dismissedUpdate, setDismissedUpdate] = useState<string | null>(null);
   const [tvs, setTvs] = useState<Tv[]>(loadTvs);
+  // Pairing from inside the app (scanned QR or typed code) is under way.
+  const [pairingInApp, setPairingInApp] = useState(false);
+  // A link from Android's share menu (/share?url=...), opened on the TV once connected.
+  const [shared, setShared] = useState<string | null>(() => readSharedLink(window.location));
+  const [showGuide, setShowGuide] = useState(() => wantsHomeScreenGuide() && !guideDismissed());
 
   const { view, actions } = useRoomSocket({
     endpoint,
     pairParams,
     onPaired: (pairing) => {
       setSelf(pairing);
+      setPairingInApp(false);
       setTvs(rememberTv(pairing)); // another TV's QR adds it; the others are kept
       stripPairParams(); // the room secret has been exchanged for a token: remove it from the URL
     },
     onRestored: (pairing) => {
       setSelf(pairing);
+      setPairingInApp(false); // e.g. a typed code failed and the TV we had reconnects
       setTvs(rememberTv(pairing));
     },
-    onUnpaired: () => setSelf(null),
+    onUnpaired: () => {
+      setSelf(null);
+      setPairingInApp(false);
+    },
   });
 
   const connected = view.connection === "online";
+  const pairingNow = pairingInApp && view.connection !== "idle"; // a refused code ends as "idle"
   // Paired = we hold a token, i.e. either this session paired or a saved pairing is reconnecting.
-  const paired = self !== null || (pairParams === null && view.connection !== "idle");
+  const paired = self !== null || (pairParams === null && !pairingNow && view.connection !== "idle");
   const progress = Object.values(view.pending).at(-1) ?? null;
   const lastIsError = view.log.at(-1)?.level === "error";
   // A guest phone (set on the PC) gets media, volume and voice: no touchpad, keys or PC settings.
@@ -84,11 +102,42 @@ export default function App() {
   // The phone app and the PC app update separately: only show sliders a PC this old can answer.
   const canSlide = versionAtLeast(view.room.daemon_version, SLIDERS_SINCE);
   const hasApps = versionAtLeast(view.room.daemon_version, APPS_SINCE);
-  const voice = useVoice({
+  const canShare = versionAtLeast(view.room.daemon_version, SHARE_SINCE);
+  const canPower = versionAtLeast(view.room.daemon_version, POWER_SINCE) && !guest;
+  const voice = useSpeech({
     mode: micMode,
     disabled: !connected,
+    onText: (text) => {
+      tap();
+      if (actions.sendText(text)) setRecents(rememberCommand(text));
+    },
     onRecording: (recording) => actions.sendAudio(recording),
     onProblem: actions.notify,
+  });
+  const pairWith = (params: PairParams) => {
+    setPairingInApp(true);
+    actions.pairWith(params);
+  };
+  const pairWithCode = (code: string) => {
+    setPairingInApp(true);
+    actions.pairWithCode(code);
+  };
+  const openLink = (url: string) => {
+    tap();
+    if (actions.sendButton("open_url", { url })) actions.notify(`Opening ${linkHost(url)} on the TV`);
+  };
+
+  // A shared link waits for the connection, then opens once (a reload must not open it again).
+  const shareSent = useRef(false);
+  useEffect(() => {
+    clearSharedLink();
+  }, []);
+  useEffect(() => {
+    if (!shared || shareSent.current || !connected || !view.room.daemon_version) return;
+    shareSent.current = true;
+    if (canShare) openLink(shared);
+    else actions.notify(`Update ${APP_NAME} on the PC to 0.6.0 or later to open shared links.`);
+    setTimeout(() => setShared(null), 0);
   });
   const chooseMic = (next: MicMode) => {
     setMicMode(next);
@@ -109,6 +158,10 @@ export default function App() {
     else if (send.kind === "key") actions.sendKey(send.key, send.mods);
     else actions.sendText(send.text);
   };
+  const changeGrid = (grid: Grid) => (next: (string | null)[]) => {
+    (grid === "keys" ? setKeyFavorites : setFavorites)(next);
+    saveFavorites(next, grid);
+  };
   // Another TV: make it the active pairing and start again (the connection only knows one).
   const switchTv = async (roomId: string) => {
     const target = tvs.find((t) => t.pairing.roomId === roomId);
@@ -128,11 +181,6 @@ export default function App() {
       await actions.unpair();
     }
   };
-  const changeFavorites = (next: (string | null)[]) => {
-    setFavorites(next);
-    saveFavorites(next);
-  };
-
   // Slide the new tab in from the side it sits on.
   const tabIndex = TABS.findIndex((t) => t.id === tab);
   const [lastIndex, setLastIndex] = useState(tabIndex);
@@ -153,7 +201,9 @@ export default function App() {
   useEffect(() => {
     if (askId === null) return;
     const open = setTimeout(() => {
-      if (voiceRef.current.supported && !voiceRef.current.active) voiceRef.current.toggle();
+      // the keyboard's dictation can only be opened by a tap, so it waits for one
+      const v = voiceRef.current;
+      if (v.supported && v.engine !== "keyboard" && !v.active) v.toggle();
     }, 1500 + askLength * 70);
     const close = setTimeout(() => {
       if (voiceRef.current.active) voiceRef.current.toggle(); // sends what was said
@@ -213,7 +263,34 @@ export default function App() {
         </div>
       </header>
 
-      <QRScanner connection={view.connection} hasPairParams={pairParams !== null} paired={paired} />
+      <QRScanner
+        connection={view.connection}
+        hasPairParams={pairParams !== null}
+        paired={paired}
+        pairing={pairingNow}
+        onScan={pairWith}
+        onCode={pairWithCode}
+      />
+
+      {showGuide && (
+        <HomeScreenGuide
+          paired={paired}
+          onDismiss={() => {
+            dismissGuide();
+            setShowGuide(false);
+          }}
+        />
+      )}
+
+      {shared && (
+        <aside className="glass rise flex items-center gap-3 rounded-2xl p-3 text-sm" role="status" aria-label="Shared link">
+          <Icon name="link" size={18} />
+          <span className="min-w-0 flex-1 truncate">
+            {paired ? "Opening on the TV: " : "Pair this phone to open "}
+            <b>{linkHost(shared)}</b>
+          </span>
+        </aside>
+      )}
 
       {paired && view.connection !== "rejected" && (
         <>
@@ -333,17 +410,35 @@ export default function App() {
                   </div>
                 )}
                 {hasApps && <AppsRow disabled={!connected} onOpen={sendCommand} />}
-                <Favorites slots={favorites} connected={connected} keysAllowed={inputAllowed} daemonVersion={view.room.daemon_version} onSend={sendFavorite} onChange={changeFavorites} />
+                <Favorites slots={favorites} connected={connected} keysAllowed={inputAllowed} daemonVersion={view.room.daemon_version} onSend={sendFavorite} onChange={changeGrid("remote")} />
                 {inputAllowed ? <TouchPad disabled={!connected} onPointer={(e) => actions.sendPointer(e)} /> : inputOff}
                 <TimerList timers={view.room.timers} />
                 <FriendsBar devices={selectDevices(view)} selfId={self?.deviceId ?? null} />
               </>
             )}
 
-            {tab === "saved" && <BookmarkList items={view.room.bookmarks} disabled={!connected} onCommand={sendCommand} />}
+            {tab === "saved" && (
+              <>
+                {canShare && <OpenLink disabled={!connected} onOpen={openLink} />}
+                <BookmarkList items={view.room.bookmarks} disabled={!connected} onCommand={sendCommand} />
+              </>
+            )}
 
-            {tab === "keys" &&
-              (inputAllowed ? <KeyPad disabled={!connected} onKey={actions.sendKey} onText={actions.sendTyped} /> : inputOff)}
+            {tab === "keys" && (
+              <>
+                {/* more buttons of your own: the same choices as Favourites, kept separately */}
+                <Favorites
+                  title="My buttons"
+                  slots={keyFavorites}
+                  connected={connected}
+                  keysAllowed={inputAllowed}
+                  daemonVersion={view.room.daemon_version}
+                  onSend={sendFavorite}
+                  onChange={changeGrid("keys")}
+                />
+                {inputAllowed ? <KeyPad disabled={!connected} onKey={actions.sendKey} onText={actions.sendTyped} /> : inputOff}
+              </>
+            )}
           </div>
         </>
       )}
@@ -368,6 +463,15 @@ export default function App() {
           currentRoom={self?.roomId ?? null}
           guest={guest}
           onRenameTv={(roomId, label) => setTvs(renameTv(roomId, label))}
+          onPower={canPower ? (action) => actions.sendButton(action) : undefined}
+          onScan={(params) => {
+            setSettingsOpen(false);
+            pairWith(params);
+          }}
+          onCode={(code) => {
+            setSettingsOpen(false);
+            pairWithCode(code);
+          }}
           onClose={() => setSettingsOpen(false)}
         />
       )}

@@ -18,3 +18,6 @@ export const APPS_SINCE = "0.4.0";
 
 /** The first PC app version with exit fullscreen, duplicate tab and playback speed. */
 export const EXTRAS_SINCE = "0.4.0";
+/** The first PC app version that can lock, sleep and shut down the PC, and open shared links. */
+export const POWER_SINCE = "0.6.0";
+export const SHARE_SINCE = "0.6.0";

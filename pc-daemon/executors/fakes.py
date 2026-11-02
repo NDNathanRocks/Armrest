@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import io
+from dataclasses import replace
 
 from executors.base import (
     ActionResult,
     BrowserSnapshot,
     MediaCommand,
     MediaKey,
+    PowerAction,
     Screenshot,
 )
 from executors.page_items import ITEM_NOT_FOUND, NO_SEARCH_BAR, Candidate, pick_item
+from media_sessions import AppCommand, AppMedia
 
 
 def blank_png(width: int = 1920, height: int = 1080) -> bytes:
@@ -34,6 +37,7 @@ class FakeBrowser:
         self.search_bar = True  # the page has a search bar
         self.visible_text: set[str] = set()  # words click_text can find on the page
         self.subtitle_dom_fail = False  # no usable subtitles control in the DOM
+        self.no_media = False  # the tab has no video or audio element (media_command fails)
         # failure scripting
         self.dom_fail_reason: str | None = None  # applies to click/fullscreen/close_ad dom tier
         self.js_ok = False
@@ -143,6 +147,8 @@ class FakeBrowser:
 
     async def media_command(self, cmd: MediaCommand) -> ActionResult:
         self._log(f"media:{cmd}")
+        if self.no_media:
+            return ActionResult(False, "dom", "no video or audio on this page", "no_media")
         if cmd in ("play", "pause", "play_pause"):
             if self.fail_verify_times > 0:
                 self.fail_verify_times -= 1
@@ -251,6 +257,8 @@ class FakeOS:
         self.typed: list[str] = []
         self.display_slept = False
         self.awake = False
+        self.power_log: list[str] = []
+        self.shutdown_pending = False
 
     async def press_media_key(self, key: MediaKey) -> ActionResult:
         self.keys.append(key)
@@ -307,5 +315,45 @@ class FakeOS:
         self.display_slept = True
         return ActionResult(True, "os")
 
+    async def power(self, action: PowerAction) -> ActionResult:
+        if action == "cancel_shutdown":
+            if not self.shutdown_pending:
+                return ActionResult(
+                    False, "os", "There is no shutdown to cancel", "nothing_to_cancel"
+                )
+            self.shutdown_pending = False
+        elif action == "shutdown":
+            self.shutdown_pending = True
+        self.power_log.append(action)
+        return ActionResult(True, "os")
+
     def keep_awake(self, enabled: bool) -> None:
         self.awake = enabled
+
+
+class FakeMediaApps:
+    """Another app's media session (media_sessions.MediaApps), e.g. Spotify playing a song."""
+
+    def __init__(self, media: AppMedia | None = None) -> None:
+        self.media = media
+        self.commands: list[str] = []
+        self.seeks: list[float] = []
+
+    async def current(self) -> AppMedia | None:
+        return self.media
+
+    async def command(self, cmd: AppCommand) -> ActionResult:
+        if self.media is None:
+            return ActionResult(False, "os", "No media app is open", "no_media_app")
+        self.commands.append(cmd)
+        playing = {"play": True, "pause": False, "play_pause": not self.media.is_playing}
+        if cmd in playing:
+            self.media = replace(self.media, is_playing=playing[cmd])
+        return ActionResult(True, "os", observed={"app": self.media.app})
+
+    async def seek_to(self, position_s: float) -> ActionResult:
+        if self.media is None or not self.media.can_seek:
+            return ActionResult(False, "os", "This app does not allow seeking", "unsupported")
+        self.seeks.append(position_s)
+        self.media = replace(self.media, position_s=position_s)
+        return ActionResult(True, "os")

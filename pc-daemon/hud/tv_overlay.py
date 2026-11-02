@@ -30,6 +30,8 @@ QR_CARD = 420
 QR_MARGIN = 48
 QR_PAD = 24
 QR_CAPTION = 60
+QR_CODE_LINE = 44  # "or type the code K7QM-4XPA" under the caption
+MUTED_INK = QColor(63, 63, 70)
 
 
 class TvOverlay(QWidget):
@@ -78,7 +80,9 @@ class TvOverlay(QWidget):
 
     def _qr_card_rect(self) -> QRectF:
         s = self._scale()
-        outer, margin, caption = QR_CARD * s, QR_MARGIN * s, QR_CAPTION * s
+        card = self._frame.qr
+        lines = QR_CAPTION + (QR_CODE_LINE if card is not None and card.code else 0)
+        outer, margin, caption = QR_CARD * s, QR_MARGIN * s, lines * s
         return QRectF(
             self.width() - margin - outer,
             self.height() - margin - outer - caption,
@@ -203,10 +207,21 @@ class TvOverlay(QWidget):
                     p.drawRect(rect.x() + c * module, rect.y() + r * module, module, module)
         p.setPen(INK)
         p.setFont(self._font(26 * s, bold=True))
+        code_h = QR_CODE_LINE * s if card.code else 0.0
         caption = QRect(
             int(card_rect.x()),
-            int(card_rect.bottom() - QR_CAPTION * s),
+            int(card_rect.bottom() - (QR_CAPTION * s + code_h)),
             int(card_rect.width()),
             int(QR_CAPTION * s),
         )
         p.drawText(caption, Qt.AlignmentFlag.AlignCenter, card.caption)
+        if card.code:
+            line = QRect(
+                int(card_rect.x()),
+                int(card_rect.bottom() - code_h - 8 * s),
+                int(card_rect.width()),
+                int(code_h),
+            )
+            p.setPen(MUTED_INK)
+            p.setFont(self._font(24 * s, bold=True))  # read from the sofa, typed on a phone
+            p.drawText(line, Qt.AlignmentFlag.AlignCenter, f"or type the code  {card.code}")

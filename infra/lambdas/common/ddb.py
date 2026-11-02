@@ -168,6 +168,7 @@ class Store:
         device_id: str | None,
         authed: bool,
         token_exp: float | None = None,
+        pair_code_hash: str | None = None,
     ) -> None:
         item: dict[str, Any] = {
             "connection_id": connection_id,
@@ -182,6 +183,8 @@ class Store:
             item["device_id"] = device_id
         if token_exp is not None:
             item["token_exp"] = int(token_exp)
+        if pair_code_hash is not None:
+            item["pair_code_hash"] = pair_code_hash  # the code this unpaired phone connected with
         self._connections.put_item(Item=item)
 
     def get_connection(self, connection_id: str) -> dict[str, Any] | None:
@@ -303,3 +306,48 @@ class Store:
     def release_idempotency(self, room_id: str, key: str) -> None:
         """Undo claim_idempotency when the command was never delivered, so a retry can succeed."""
         self._idem.delete_item(Key={"pk": f"{room_id}#{key}"})
+
+    # ------------------------------------------------------------------ pairing codes
+    # Short codes typed instead of scanning the QR (pc-daemon/pair_codes.py). Only the code's
+    # SHA-256 is stored, in the idempotency table (pk + ttl). "code" is shorter than any room id
+    # (8+ characters), so these keys can never meet "<room_id>#<key>" idempotency keys.
+
+    def put_pair_code(self, code_hash: str, room_id: str, ttl_s: int) -> bool:
+        """Accept this code for this room for ttl_s. False if another room holds the same hash."""
+        try:
+            self._idem.put_item(
+                Item={
+                    "pk": f"code#{code_hash}",
+                    "room_id": room_id,
+                    "ttl": int(self._clock()) + ttl_s,
+                },
+                ConditionExpression="attribute_not_exists(pk) OR room_id = :r",
+                ExpressionAttributeValues={":r": room_id},
+            )
+            return True
+        except ClientError as err:
+            if _is(err, "ConditionalCheckFailedException"):
+                return False
+            raise
+
+    def pair_code_room(self, code_hash: str) -> str | None:
+        """The room a live code belongs to (DynamoDB deletes expired rows only eventually)."""
+        item = self._idem.get_item(Key={"pk": f"code#{code_hash}"}, ConsistentRead=True).get("Item")
+        if item is None or int(item.get("ttl", 0)) <= int(self._clock()):
+            return None
+        return str(item["room_id"])
+
+    def consume_pair_code(self, code_hash: str, room_id: str) -> bool:
+        """Use the code up (it works once); False if it is gone, expired or not this room's."""
+        try:
+            self._idem.delete_item(
+                Key={"pk": f"code#{code_hash}"},
+                ConditionExpression="room_id = :r AND #t > :now",
+                ExpressionAttributeNames={"#t": "ttl"},
+                ExpressionAttributeValues={":r": room_id, ":now": int(self._clock())},
+            )
+            return True
+        except ClientError as err:
+            if _is(err, "ConditionalCheckFailedException"):
+                return False
+            raise

@@ -14,8 +14,9 @@ import {
   findFav,
   loadCustomKeys,
   makeCustomKey,
+  makeCustomSay,
   saveCustomKeys,
-  type CustomKey,
+  type CustomButton,
   type Fav,
 } from "../utils/favorites";
 import { tap } from "../utils/haptics";
@@ -31,15 +32,17 @@ interface Props {
   daemonVersion: string;
   onSend: (fav: Fav) => void;
   onChange: (slots: (string | null)[]) => void;
+  /** The heading: "Favourites" on the Remote tab, "My buttons" on the Keys tab. */
+  title?: string;
 }
 
 const LONG_PRESS_MS = 550;
 
 /** Two rows of four buttons the user fills from the library. Long-press or Edit rearranges them. */
-export function Favorites({ slots, connected, keysAllowed, daemonVersion, onSend, onChange }: Props) {
+export function Favorites({ slots, connected, keysAllowed, daemonVersion, onSend, onChange, title = "Favourites" }: Props) {
   const [editing, setEditing] = useState(false);
   const [picking, setPicking] = useState<number | null>(null);
-  const [custom, setCustom] = useState<CustomKey[]>(loadCustomKeys);
+  const [custom, setCustom] = useState<CustomButton[]>(loadCustomKeys);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const held = useRef(false);
 
@@ -58,15 +61,15 @@ export function Favorites({ slots, connected, keysAllowed, daemonVersion, onSend
   useEffect(() => stopHold, []);
 
   const usable = (fav: Fav) => connected && favSupported(fav, daemonVersion) && (fav.send.kind !== "key" || keysAllowed);
-  const changeCustom = (next: CustomKey[]) => {
+  const changeCustom = (next: CustomButton[]) => {
     setCustom(next);
     saveCustomKeys(next);
   };
 
   return (
-    <section aria-label="Favourites" className="space-y-2.5">
+    <section aria-label={title} className="space-y-2.5">
       <div className="flex items-center justify-between px-1">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Favourites</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">{title}</h2>
         <button
           type="button"
           onClick={() => {
@@ -173,11 +176,11 @@ function Picker({
 }: {
   current: string | null;
   used: readonly (string | null)[];
-  custom: readonly CustomKey[];
+  custom: readonly CustomButton[];
   daemonVersion: string;
   keysAllowed: boolean;
   onPick: (id: string | null) => void;
-  onCreate: (made: CustomKey) => void;
+  onCreate: (made: CustomButton) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
 }) {
@@ -215,7 +218,7 @@ function Picker({
       <div className="sheet mx-auto max-h-[85%] w-full max-w-md overflow-y-auto rounded-t-[32px] bg-canvas px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-3 ring-1 ring-white/10">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" aria-hidden />
         <header className="mb-3 flex items-center gap-2">
-          <h2 className="flex-1 text-lg font-semibold">{creating ? "New shortcut" : "Choose a button"}</h2>
+          <h2 className="flex-1 text-lg font-semibold">{creating ? "New button" : "Choose a button"}</h2>
           {current && !creating && (
             <button type="button" onClick={() => onPick(null)} className="press flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm text-rose-300">
               <Icon name="trash" size={16} /> Remove
@@ -232,8 +235,8 @@ function Picker({
             if (group === "Custom") {
               return (
                 <div key={group} className="mb-4">
-                  <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-widest text-muted">Your shortcuts</h3>
-                  {!keysAllowed && <p className="mb-2 px-1 text-xs text-zinc-400">Shortcuts press keys on the PC, so they need the touchpad and keys turned on for this phone.</p>}
+                  <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-widest text-muted">Your buttons</h3>
+                  {!keysAllowed && <p className="mb-2 px-1 text-xs text-zinc-400">Shortcuts press keys on the PC, so they need the touchpad and keys turned on for this phone. Commands always work.</p>}
                   <div className="grid grid-cols-4 gap-2">
                     {custom.map((c) => {
                       const fav = findFav(c.id, custom);
@@ -257,7 +260,7 @@ function Picker({
                         className="press flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-2xl px-1 text-center text-[11px] leading-tight text-accent ring-1 ring-dashed ring-accent/50"
                       >
                         <Icon name="plus" size={20} />
-                        New shortcut
+                        New button
                       </button>
                     )}
                   </div>
@@ -281,8 +284,77 @@ function Picker({
 
 const LETTERS = [..."abcdefghijklmnopqrstuvwxyz0123456789"].map((k) => [k, k.toUpperCase()] as const);
 
+/** A new button of your own: a keyboard shortcut, or a command you would otherwise type or say. */
+function ShortcutEditor({ onSave }: { onSave: (made: CustomButton) => void }) {
+  const [kind, setKind] = useState<"key" | "say">("key");
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl p-1 ring-1 ring-white/10" role="group" aria-label="Kind of button">
+        {(
+          [
+            ["key", "Keyboard shortcut"],
+            ["say", "Command"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={kind === id}
+            onClick={() => setKind(id)}
+            className={`press min-h-11 rounded-xl text-sm ${kind === id ? "bg-white/15 font-semibold text-white" : "text-muted"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {kind === "key" ? <KeyEditor onSave={onSave} /> : <SayEditor onSave={onSave} />}
+    </div>
+  );
+}
+
+/** A command saved as a button: sent exactly like typing it in the command bar. */
+function SayEditor({ onSave }: { onSave: (made: CustomButton) => void }) {
+  const [text, setText] = useState("");
+  const [label, setLabel] = useState("");
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) onSave(makeCustomSay(label, text));
+      }}
+    >
+      <p className="text-sm text-zinc-400">Anything you would type or say, e.g. &ldquo;open my bookmark netflix&rdquo; or &ldquo;play lofi on YouTube&rdquo;.</p>
+      <label className="block">
+        <span className="mb-2 block px-1 text-xs font-semibold uppercase tracking-widest text-muted">Command</span>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          maxLength={200}
+          placeholder="volume 30 and fullscreen"
+          autoCapitalize="none"
+          className="glass-btn min-h-12 w-full rounded-2xl px-3 text-base outline-none placeholder:text-zinc-500"
+        />
+      </label>
+      <label className="block">
+        <span className="mb-2 block px-1 text-xs font-semibold uppercase tracking-widest text-muted">Name (optional)</span>
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          maxLength={40}
+          placeholder="e.g. Movie night"
+          className="glass-btn min-h-12 w-full rounded-2xl px-3 text-base outline-none placeholder:text-zinc-500"
+        />
+      </label>
+      <button type="submit" disabled={!text.trim()} className="press min-h-12 w-full rounded-full bg-accent font-semibold text-zinc-950 disabled:opacity-40">
+        Add button
+      </button>
+    </form>
+  );
+}
+
 /** Build a keyboard shortcut: hold-keys (Ctrl, Alt, Shift) plus one key, and an optional name. */
-function ShortcutEditor({ onSave }: { onSave: (made: CustomKey) => void }) {
+function KeyEditor({ onSave }: { onSave: (made: CustomButton) => void }) {
   const [mods, setMods] = useState<Modifier[]>([]);
   const [key, setKey] = useState("");
   const [label, setLabel] = useState("");

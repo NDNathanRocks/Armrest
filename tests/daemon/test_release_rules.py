@@ -98,7 +98,8 @@ def test_the_phone_site_sends_its_security_headers() -> None:
     for line in (
         "Referrer-Policy: no-referrer",
         "X-Frame-Options: DENY",
-        "Permissions-Policy: microphone=(self), camera=(), geolocation=()",
+        # camera: the in-app scanner pairs an iPhone home-screen app (plan 15G)
+        "Permissions-Policy: microphone=(self), camera=(self), geolocation=()",
         "connect-src 'self' wss://*.execute-api.us-east-2.amazonaws.com;",
         "script-src 'self';",
         "frame-ancestors 'none'",

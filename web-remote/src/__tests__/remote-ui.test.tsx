@@ -1,11 +1,22 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { Favorites } from "../components/Favorites";
 import { NowPlayingCard } from "../components/NowPlayingCard";
 import { Slider } from "../components/Slider";
 import { VolumeSlider } from "../components/VolumeSlider";
-import { DEFAULT_FAVORITES, LIBRARY, SLOTS, assign, blockedReason, comboLabel, loadCustomKeys, loadFavorites, saveFavorites } from "../utils/favorites";
+import {
+  DEFAULT_FAVORITES,
+  DEFAULT_KEY_FAVORITES,
+  LIBRARY,
+  SLOTS,
+  assign,
+  blockedReason,
+  comboLabel,
+  loadCustomKeys,
+  loadFavorites,
+  saveFavorites,
+} from "../utils/favorites";
 import { resetAppCache } from "../utils/resetCache";
 import { createThrottle } from "../utils/throttle";
 import { versionAtLeast } from "../utils/version";
@@ -204,7 +215,7 @@ describe("favourites", () => {
     const slots = ["mute", null, null, null, null, null, null, null];
     const { unmount } = render(<Favorites daemonVersion="0.4.0" slots={slots} connected keysAllowed onSend={onSend} onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: "Add a favourite to slot 2" }));
-    fireEvent.click(screen.getByRole("button", { name: /New shortcut/ }));
+    fireEvent.click(screen.getByRole("button", { name: /New button/ }));
     fireEvent.click(screen.getByRole("button", { name: "Ctrl" }));
     fireEvent.click(screen.getByRole("button", { name: "Shift" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Key" }), { target: { value: "t" } });
@@ -229,6 +240,40 @@ describe("favourites", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete Reopen tab" }));
     expect(loadCustomKeys()).toEqual([]);
     expect(onChange).toHaveBeenLastCalledWith(["mute", null]);
+  });
+
+  it("saves a command as a button: it sends the words like the command bar, even without keys", () => {
+    const onSend = vi.fn();
+    const onChange = vi.fn();
+    render(<Favorites daemonVersion="0.6.0" slots={[null]} connected keysAllowed={false} onSend={onSend} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add a favourite to slot 1" }));
+    fireEvent.click(screen.getByRole("button", { name: /New button/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Command" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Command" }), { target: { value: "volume 30 and fullscreen" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /Name/ }), { target: { value: "Movie night" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add button" }));
+    const made = loadCustomKeys();
+    expect(made).toEqual([expect.objectContaining({ kind: "say", label: "Movie night", text: "volume 30 and fullscreen" })]);
+    const id = made[0]!.id;
+    expect(onChange).toHaveBeenCalledWith([id]);
+    cleanup();
+    render(<Favorites daemonVersion="0.6.0" slots={[id]} connected keysAllowed={false} onSend={onSend} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Movie night" })); // enabled: it is words, not keys
+    expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ send: { kind: "text", text: "volume 30 and fullscreen" } }));
+  });
+
+  it("the Keys tab grid keeps its own 8 slots, with its own defaults", () => {
+    expect(loadFavorites("keys")).toEqual(DEFAULT_KEY_FAVORITES);
+    saveFavorites(["mute", "key_f5"], "keys");
+    expect(loadFavorites("keys").slice(0, 3)).toEqual(["mute", "key_f5", null]);
+    expect(loadFavorites("remote")).toEqual(DEFAULT_FAVORITES); // the Remote tab is untouched
+  });
+
+  it("reads shortcut buttons saved before saved commands existed", () => {
+    localStorage.setItem("cj.favorites.custom.v1", JSON.stringify([{ id: "custom_old", label: "", key: "t", mods: ["ctrl"] }]));
+    expect(loadCustomKeys()).toEqual([{ id: "custom_old", label: "", key: "t", mods: ["ctrl"] }]);
+    localStorage.setItem("cj.favorites.custom.v1", JSON.stringify([{ id: "custom_bad", label: "x", kind: "say", text: "" }]));
+    expect(loadCustomKeys()).toEqual([]); // an empty command is not a button
   });
 
   it("refuses shortcuts the PC blocks", () => {
@@ -366,6 +411,57 @@ describe("the remote page", () => {
     expect(screen.getAllByRole("button", { name: /Add a favourite|Mute|Fullscreen/ }).length).toBeGreaterThan(0);
   });
 
+  it("PC power is for owners of a 0.6.0 PC; sleep and shut down ask first", async () => {
+    const sock = await pairedRemote("0.6.0");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const sent = () => sock.sent.filter((m) => m["type"] === "cmd.button").map((m) => (m["payload"] as { action: string }).action);
+    fireEvent.click(screen.getByRole("button", { name: /Lock/ }));
+    expect(sent().at(-1)).toBe("pc_lock");
+    fireEvent.click(screen.getByRole("button", { name: /Shut down/ }));
+    expect(screen.getByRole("alertdialog", { name: "Confirm" })).toHaveTextContent(/1 minute/);
+    expect(sent().at(-1)).toBe("pc_lock"); // nothing yet
+    fireEvent.click(screen.getByRole("button", { name: "Shut down" }));
+    expect(sent().at(-1)).toBe("pc_shutdown");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel a shutdown" }));
+    expect(sent().at(-1)).toBe("pc_cancel_shutdown");
+  });
+
+  it("an older PC gets no power buttons and no link box", async () => {
+    await pairedRemote("0.5.0");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.queryByText("PC power")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Saved" }));
+    expect(screen.queryByLabelText("Link to open on the TV")).toBeNull();
+  });
+
+  it("opens a pasted link on the TV from the Saved tab", async () => {
+    const sock = await pairedRemote("0.6.0");
+    fireEvent.click(screen.getByRole("tab", { name: "Saved" }));
+    fireEvent.change(screen.getByLabelText("Link to open on the TV"), { target: { value: "look https://youtu.be/abc ok" } });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(sock.sent.at(-1)).toMatchObject({ type: "cmd.button", payload: { action: "open_url", args: { url: "https://youtu.be/abc" } } });
+  });
+
+  it("the Keys tab has 8 more buttons of your own above the keyboard", async () => {
+    const sock = await pairedRemote("0.6.0");
+    fireEvent.click(screen.getByRole("tab", { name: "Touchpad & keys" }));
+    const grid = screen.getByRole("region", { name: "My buttons" });
+    expect(grid.querySelectorAll("button[aria-label]").length).toBeGreaterThanOrEqual(8);
+    fireEvent.click(screen.getByRole("button", { name: "Escape" }));
+    expect(sock.sent.at(-1)).toMatchObject({ type: "input.key", payload: { key: "esc" } });
+  });
+
+  it("says which app is playing when it is not the TV browser", async () => {
+    const sock = await pairedRemote("0.6.0");
+    await act(async () => {
+      sock.receive(
+        incoming("state.patch", { rev: 4, now_playing: { title: "Blinding Lights · The Weeknd", is_playing: true, app: "Spotify", position_s: 1, duration_s: 200 } }),
+      );
+    });
+    expect(await screen.findByText(/Spotify · Playing/)).toBeInTheDocument();
+  });
+
   it("sends a slider value as a button command with a number, without tracking it as a task", async () => {
     const sock = await pairedRemote("0.3.0");
     const bar = screen.getByRole("slider", { name: "Volume" });
@@ -497,5 +593,45 @@ describe("the remote page", () => {
     });
     await screen.findByRole("tablist");
     expect(screen.queryByRole("button", { name: "Buy" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Share to TV (Android share menu)", () => {
+  const pairing = { roomId: "room-abcdef123", deviceId: "dev-7", deviceToken: "t.o.k", expiresAt: 2_000_000_000, deviceName: "Pixel" };
+  beforeEach(() => {
+    FakeSocket.reset();
+    vi.stubGlobal("WebSocket", FakeSocket);
+    localStorage.setItem("cj.pairing", JSON.stringify(pairing));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, "", "/");
+  });
+
+  async function shareTo(version: string) {
+    window.history.replaceState(null, "", "/share?title=Song&text=" + encodeURIComponent("Listen https://youtu.be/abc"));
+    render(<App />);
+    expect(window.location.pathname).toBe("/"); // a reload must not open it twice
+    await waitFor(() => expect(FakeSocket.instances.length).toBe(1));
+    const sock = FakeSocket.last;
+    await act(async () => sock.open());
+    await act(async () => {
+      sock.receive(incoming("state.snapshot", { pc_online: true, rev: 1, daemon_version: version }));
+    });
+    return sock;
+  }
+
+  it("opens the shared link on the TV once the phone is connected", async () => {
+    const sock = await shareTo("0.6.0");
+    await waitFor(() => expect(sock.sent.some((m) => m["type"] === "cmd.button")).toBe(true));
+    const opened = sock.sent.filter((m) => m["type"] === "cmd.button");
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({ payload: { action: "open_url", args: { url: "https://youtu.be/abc" } } });
+  });
+
+  it("tells an older PC's owner to update instead", async () => {
+    const sock = await shareTo("0.5.0");
+    expect(await screen.findByText(/to 0.6.0 or later to open shared links/)).toBeInTheDocument();
+    expect(sock.sent.filter((m) => m["type"] === "cmd.button")).toHaveLength(0);
   });
 });

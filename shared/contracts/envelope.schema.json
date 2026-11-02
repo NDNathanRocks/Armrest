@@ -624,7 +624,12 @@
             "seek_to",
             "buy",
             "exit_fullscreen",
-            "duplicate_tab"
+            "duplicate_tab",
+            "pc_lock",
+            "pc_sleep",
+            "pc_shutdown",
+            "pc_cancel_shutdown",
+            "open_url"
           ],
           "title": "Action",
           "type": "string"
@@ -1379,6 +1384,19 @@
     "NowPlaying": {
       "additionalProperties": false,
       "properties": {
+        "app": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "App"
+        },
         "duration_s": {
           "default": 0.0,
           "title": "Duration S",
@@ -1425,6 +1443,160 @@
         "title"
       ],
       "title": "NowPlaying",
+      "type": "object"
+    },
+    "PairCode": {
+      "additionalProperties": false,
+      "description": "PC -> relay (0.6.0+): register the short pairing code shown under the QR.",
+      "properties": {
+        "from": {
+          "title": "From",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/PairCodePayload"
+        },
+        "reply_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reply To"
+        },
+        "room_id": {
+          "title": "Room Id",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "pair.code",
+          "default": "pair.code",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "default": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "room_id",
+        "from",
+        "payload"
+      ],
+      "title": "PairCode",
+      "type": "object"
+    },
+    "PairCodeOk": {
+      "additionalProperties": false,
+      "description": "Relay -> PC: the code is stored; the TV may show it.",
+      "properties": {
+        "from": {
+          "title": "From",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/PairCodeOkPayload"
+        },
+        "reply_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reply To"
+        },
+        "room_id": {
+          "title": "Room Id",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        },
+        "type": {
+          "const": "pair.code.ok",
+          "default": "pair.code.ok",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "default": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "room_id",
+        "from",
+        "payload"
+      ],
+      "title": "PairCodeOk",
+      "type": "object"
+    },
+    "PairCodeOkPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Code Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code_hash"
+      ],
+      "title": "PairCodeOkPayload",
+      "type": "object"
+    },
+    "PairCodePayload": {
+      "additionalProperties": false,
+      "description": "PC -> relay: accept this pairing code (only its SHA-256) for a while.",
+      "properties": {
+        "code_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Code Hash",
+          "type": "string"
+        },
+        "expires_s": {
+          "maximum": 900,
+          "minimum": 30,
+          "title": "Expires S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "code_hash",
+        "expires_s"
+      ],
+      "title": "PairCodePayload",
       "type": "object"
     },
     "PairDenied": {
@@ -1569,6 +1741,18 @@
         "expires_at": {
           "title": "Expires At",
           "type": "number"
+        },
+        "room_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Room Id"
         }
       },
       "required": [
@@ -1644,13 +1828,26 @@
           "title": "Device Name",
           "type": "string"
         },
+        "pair_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9-]{8,9}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pair Code"
+        },
         "room_secret": {
+          "default": "",
           "title": "Room Secret",
           "type": "string"
         }
       },
       "required": [
-        "room_secret",
         "device_name"
       ],
       "title": "PairRequestPayload",
@@ -2464,6 +2661,8 @@
       "input.key": "#/$defs/InputKey",
       "input.pointer": "#/$defs/InputPointer",
       "input.text": "#/$defs/InputText",
+      "pair.code": "#/$defs/PairCode",
+      "pair.code.ok": "#/$defs/PairCodeOk",
       "pair.denied": "#/$defs/PairDenied",
       "pair.granted": "#/$defs/PairGranted",
       "pair.request": "#/$defs/PairRequest",
@@ -2542,6 +2741,12 @@
     },
     {
       "$ref": "#/$defs/RoomDeleted"
+    },
+    {
+      "$ref": "#/$defs/PairCode"
+    },
+    {
+      "$ref": "#/$defs/PairCodeOk"
     },
     {
       "$ref": "#/$defs/DeviceRevoke"

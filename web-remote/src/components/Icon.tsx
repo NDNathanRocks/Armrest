@@ -131,6 +131,22 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   speed: <path d="M4 17a8 8 0 1 1 16 0M12 17l4-5" />,
+  camera: (
+    <>
+      <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </>
+  ),
+  power: <path d="M12 3v8M7 6.3a7 7 0 1 0 10 0" />,
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  link: <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />,
+  share: <path d="M12 4v11M8 8l4-4 4 4M5 13v6h14v-6" />,
+  chat: <path d="M5 5h14v10H10l-4 4v-4H5z" />,
 };
 
 export type IconName = keyof typeof PATHS;

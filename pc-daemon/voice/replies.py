@@ -17,6 +17,7 @@ STYLES = ("jarvis", "friendly", "brief")
 SITE_LABELS = {"ytmusic": "YouTube Music", "youtube": "YouTube"}
 _SITE_BY_NAME = {"youtube music": "YouTube Music", "youtube": "YouTube"}
 MAX_SUBJECT = 60
+POWER_WORDS = frozenset({"lock", "sleep", "shutdown", "cancel_shutdown"})
 
 # kind -> style -> fragments. A fragment has no capital letter or full stop of its own: several
 # of them are joined into one sentence ("new tab is open, and now playing X on YouTube Music").
@@ -145,6 +146,31 @@ PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
         "friendly": ("screen off", "lights out"),
         "brief": ("screen off",),
     },
+    "lock": {
+        "jarvis": ("locking the PC",),
+        "friendly": ("locking up",),
+        "brief": ("locked",),
+    },
+    "pc_sleep": {
+        "jarvis": ("putting the PC to sleep. Good night",),
+        "friendly": ("night night, going to sleep",),
+        "brief": ("sleeping",),
+    },
+    "shutdown": {
+        "jarvis": ("shutting down in one minute. Say cancel the shutdown to stop it",),
+        "friendly": ("shutting down in a minute. Say cancel the shutdown if you change your mind",),
+        "brief": ("shutting down in one minute",),
+    },
+    "cancel_shutdown": {
+        "jarvis": ("shutdown cancelled", "I'll stay on"),
+        "friendly": ("okay, staying on", "shutdown cancelled"),
+        "brief": ("shutdown cancelled",),
+    },
+    "open_link": {
+        "jarvis": ("opening your link", "here's your link"),
+        "friendly": ("opening it", "here you go"),
+        "brief": ("opened",),
+    },
     "qr": {
         "jarvis": ("the pairing code is on screen", "pairing code displayed"),
         "friendly": ("here's the code", "code's on the screen"),
@@ -225,6 +251,11 @@ def _clause(step: ActionStep, plan: IntentPlan) -> Clause | None:
         return Clause("screen_off")
     if op == "show_qr":
         return Clause("qr")
+    if op == "power":
+        action = str(a.get("action", ""))
+        return Clause({"sleep": "pc_sleep"}.get(action, action)) if action in POWER_WORDS else None
+    if op == "open_url":
+        return Clause("open_link")
     if op == "speed":
         return Clause("speed")
     if op == "browser_nav":

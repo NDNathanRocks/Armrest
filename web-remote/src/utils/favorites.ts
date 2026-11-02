@@ -104,20 +104,33 @@ export const DEFAULT_FAVORITES: readonly (string | null)[] = [
 
 const byId = new Map(LIBRARY.map((f) => [f.id, f]));
 /** A library button, or one of the user's own shortcuts. */
-export const findFav = (id: string | null, custom: readonly CustomKey[] = []): Fav | null => {
+export const findFav = (id: string | null, custom: readonly CustomButton[] = []): Fav | null => {
   if (!id) return null;
   const mine = custom.find((c) => c.id === id);
   return mine ? customFav(mine) : (byId.get(id) ?? null);
 };
 
-// ---- the user's own keyboard-shortcut buttons ("Ctrl+Shift+T", "Alt+Left", "F5")
+// ---- the user's own buttons: keyboard shortcuts ("Ctrl+Shift+T", "Alt+Left", "F5") and saved
+// commands ("open my bookmark netflix"), sent as if typed in the command bar
 
 export interface CustomKey {
   id: string;
   label: string;
   key: string;
   mods: Modifier[];
+  /** Absent on buttons saved before 0.6.0 (they are all shortcuts). */
+  kind?: "key";
 }
+
+export interface CustomSay {
+  id: string;
+  label: string;
+  kind: "say";
+  text: string;
+}
+
+export type CustomButton = CustomKey | CustomSay;
+const MAX_SAY = 200;
 
 const CUSTOM_KEY = "cj.favorites.custom.v1";
 export const MAX_CUSTOM = 24;
@@ -166,22 +179,25 @@ export function blockedReason(key: string, mods: readonly Modifier[]): string | 
   return null;
 }
 
-const customFav = (c: CustomKey): Fav => ({
-  id: c.id,
-  label: c.label || comboLabel(c.key, c.mods),
-  group: "Custom",
-  icon: "keyboard",
-  send: { kind: "key", key: c.key, mods: [...c.mods] },
-});
+const customFav = (c: CustomButton): Fav =>
+  c.kind === "say"
+    ? { id: c.id, label: c.label || c.text, group: "Custom", icon: "chat", send: { kind: "text", text: c.text } }
+    : {
+        id: c.id,
+        label: c.label || comboLabel(c.key, c.mods),
+        group: "Custom",
+        icon: "keyboard",
+        send: { kind: "key", key: c.key, mods: [...c.mods] },
+      };
 
-const isCustom = (v: unknown): v is CustomKey => {
+const isCustom = (v: unknown): v is CustomButton => {
   if (typeof v !== "object" || v === null) return false;
   const c = v as Record<string, unknown>;
+  const named = typeof c.id === "string" && c.id.startsWith("custom_") && typeof c.label === "string" && c.label.length <= 40;
+  if (!named) return false;
+  if (c.kind === "say") return typeof c.text === "string" && c.text.trim() !== "" && c.text.length <= MAX_SAY;
   return (
-    typeof c.id === "string" &&
-    c.id.startsWith("custom_") &&
-    typeof c.label === "string" &&
-    c.label.length <= 40 &&
+    (c.kind === undefined || c.kind === "key") &&
     typeof c.key === "string" &&
     validKey(c.key) &&
     Array.isArray(c.mods) &&
@@ -189,7 +205,7 @@ const isCustom = (v: unknown): v is CustomKey => {
   );
 };
 
-export function loadCustomKeys(): CustomKey[] {
+export function loadCustomKeys(): CustomButton[] {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(CUSTOM_KEY) ?? "[]");
     if (Array.isArray(raw)) return raw.filter(isCustom).slice(0, MAX_CUSTOM);
@@ -199,7 +215,7 @@ export function loadCustomKeys(): CustomKey[] {
   return [];
 }
 
-export function saveCustomKeys(list: readonly CustomKey[]): void {
+export function saveCustomKeys(list: readonly CustomButton[]): void {
   try {
     localStorage.setItem(CUSTOM_KEY, JSON.stringify(list.slice(0, MAX_CUSTOM)));
   } catch {
@@ -207,18 +223,37 @@ export function saveCustomKeys(list: readonly CustomKey[]): void {
   }
 }
 
+const newId = () => `custom_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
 /** A new shortcut button; an empty label shows the shortcut itself. */
 export function makeCustomKey(label: string, key: string, mods: readonly Modifier[]): CustomKey {
-  const id = `custom_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  return { id, label: label.trim().slice(0, 40), key, mods: MODS.filter((m) => mods.includes(m)) };
+  return { id: newId(), label: label.trim().slice(0, 40), key, mods: MODS.filter((m) => mods.includes(m)) };
 }
 
-const STORAGE_KEY = "cj.favorites.v1";
+/** A new saved-command button: tapping it sends ``text`` like the command bar. */
+export function makeCustomSay(label: string, text: string): CustomSay {
+  return { id: newId(), label: label.trim().slice(0, 40), kind: "say", text: text.trim().slice(0, MAX_SAY) };
+}
+
+/** Where each grid keeps its slots on the phone: Favourites (Remote tab) and the Keys tab. */
+export type Grid = "remote" | "keys";
+const STORAGE_KEYS: Record<Grid, string> = { remote: "cj.favorites.v1", keys: "cj.favorites.keys.v1" };
+export const DEFAULT_KEY_FAVORITES: readonly (string | null)[] = [
+  "key_esc",
+  "key_space",
+  "key_enter",
+  "key_f11",
+  "back",
+  "forward",
+  "reload",
+  "close_tab",
+];
+const DEFAULTS: Record<Grid, readonly (string | null)[]> = { remote: DEFAULT_FAVORITES, keys: DEFAULT_KEY_FAVORITES };
 
 /** The saved slots, always exactly SLOTS long. Anything unreadable falls back to the defaults. */
-export function loadFavorites(): (string | null)[] {
+export function loadFavorites(grid: Grid = "remote"): (string | null)[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEYS[grid]) ?? "null");
     if (Array.isArray(raw)) {
       const mine = new Set(loadCustomKeys().map((c) => c.id));
       const slots = raw.slice(0, SLOTS).map((v) => (typeof v === "string" && (byId.has(v) || mine.has(v)) ? v : null));
@@ -228,12 +263,12 @@ export function loadFavorites(): (string | null)[] {
   } catch {
     /* blocked or corrupt storage: use the defaults */
   }
-  return [...DEFAULT_FAVORITES];
+  return [...DEFAULTS[grid]];
 }
 
-export function saveFavorites(slots: readonly (string | null)[]): void {
+export function saveFavorites(slots: readonly (string | null)[], grid: Grid = "remote"): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(slots.slice(0, SLOTS)));
+    localStorage.setItem(STORAGE_KEYS[grid], JSON.stringify(slots.slice(0, SLOTS)));
   } catch {
     /* private mode: the choice lasts until the page closes */
   }

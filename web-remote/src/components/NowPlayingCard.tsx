@@ -97,7 +97,8 @@ function PlayingBody({ playing, pending, onSeek }: { playing: NowPlaying; pendin
               <i />
               <i />
             </span>
-            {SOURCES[playing.source ?? "other"]} · {isPlaying ? "Playing" : "Paused"}
+            {/* app: Spotify, VLC... playing on the PC itself, outside the TV browser (PC 0.6.0+) */}
+            {playing.app ?? SOURCES[playing.source ?? "other"]} · {isPlaying ? "Playing" : "Paused"}
           </p>
           {pending && <p className="mt-1 text-xs text-accent">{pending}</p>}
         </div>

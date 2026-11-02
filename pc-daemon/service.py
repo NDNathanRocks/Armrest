@@ -51,6 +51,7 @@ from contracts import (
 )
 from event_bus import EventBus
 from executors.base import Browser, OSController
+from media_sessions import MediaApps
 from remote_input import key_combo_allowed, sanitize_typed_text
 from roles import Role, RoleStore
 from stt_engine import STTEngine, STTError
@@ -171,6 +172,7 @@ class CommandService:
         state_poll_s: float = 10.0,
         idle_poll_s: float = 60.0,
         remote_input: bool = True,
+        media_apps: MediaApps | None = None,
     ) -> None:
         self.room_id = room_id
         self.bus = bus
@@ -180,6 +182,7 @@ class CommandService:
         runner.set_progress(self.progress)
         self._browser = browser
         self._os = os_ctl
+        self._apps = media_apps
         self._stt = stt
         self._timers = timers
         self._poll_s = state_poll_s
@@ -328,6 +331,7 @@ class CommandService:
                     device_id=device_id,
                     kind="button",
                     action=button.action,
+                    args=button.args,
                 )
             )
         elif isinstance(msg, CmdText):
@@ -364,9 +368,15 @@ class CommandService:
             if result.ok:
                 self.state.update(volume=level, muted=False)
             return []
-        result = await self._browser.seek_to(float(args["position_s"]))
+        position = float(args["position_s"])
+        shown = self.state.state.now_playing
+        if shown is not None and shown.app and self._apps is not None:
+            result = await self._apps.seek_to(position)  # the timeline belongs to Spotify & co
+        else:
+            result = await self._browser.seek_to(position)
         if not result.ok:
-            return [self._error("seek_failed", "There is nothing here to seek in")]
+            message = result.error if result.fallback_reason == "unsupported" else None
+            return [self._error("seek_failed", message or "There is nothing here to seek in")]
         await self.refresh_state()
         return []
 
@@ -599,7 +609,17 @@ class CommandService:
             if snap.is_playing is not None
             else None
         )
-        self._os.keep_awake(bool(snap.is_playing))  # no sleep/screensaver mid-video
+        app = await self._apps.current() if self._apps is not None else None
+        if app is not None and (playing is None or (app.is_playing and not playing.is_playing)):
+            # the TV tab has nothing (or is paused) while Spotify & co play: show the app
+            playing = NowPlaying(
+                title=app.display_title[:300],
+                is_playing=app.is_playing,
+                position_s=round(app.position_s),
+                duration_s=round(app.duration_s) if app.can_seek else 0,
+                app=app.app,
+            )
+        self._os.keep_awake(bool(playing and playing.is_playing))  # no sleep mid-video
         timers: list[TimerInfo] = self._timers.list()
         self.state.update(now_playing=playing, volume=level, muted=muted, timers=timers)
 

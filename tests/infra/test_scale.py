@@ -20,7 +20,14 @@ def connect_from(world: World, cid: str, ip: str, room: str = ROOM, role: str = 
     return int(connect_handler.handler(event, None)["statusCode"])
 
 
+def pin_clock(world: World) -> None:
+    """The counters use fixed windows: a run that crosses a minute boundary splits the count."""
+    fixed = float(int(world.clock[0]) // 3600 * 3600 + 5)
+    world.store._clock = lambda: fixed  # type: ignore[method-assign]
+
+
 def test_one_ip_cannot_open_endless_connections(world: World) -> None:
+    pin_clock(world)
     codes = [connect_from(world, f"c{i}", "203.0.113.7", role="phone") for i in range(70)]
     assert codes.count(429) == 70 - connect_handler.CONNECTS_PER_MINUTE
     assert codes[: connect_handler.CONNECTS_PER_MINUTE].count(429) == 0
@@ -28,6 +35,7 @@ def test_one_ip_cannot_open_endless_connections(world: World) -> None:
 
 
 def test_one_ip_cannot_register_endless_rooms(world: World) -> None:
+    pin_clock(world)
     limit = connect_handler.NEW_ROOMS_PER_HOUR
     codes = [connect_from(world, f"pc{i}", "203.0.113.9", room=f"room-{i:04d}") for i in range(8)]
     assert codes[:limit] == [200] * limit

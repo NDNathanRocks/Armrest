@@ -7,6 +7,7 @@ Schema to shared/contracts/envelope.schema.json for the PWA TypeScript codegen.
 from __future__ import annotations
 
 import os
+import re
 import time
 from typing import Annotated, Any, Literal
 
@@ -14,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 PROTOCOL_VERSION = 1  # keep in sync with _EnvelopeBase.v
 MAX_AUDIO_CHUNK_B64 = 24 * 1024
+MAX_URL_LEN = 2000
 
 QuickAction = Literal[
     "play_pause",
@@ -44,6 +46,12 @@ QuickAction = Literal[
     "buy",  # opens where to buy on the TV (Store page or website); PC 1.0.0+, see RoomState.license
     "exit_fullscreen",  # PC 0.4.0+
     "duplicate_tab",  # PC 0.4.0+
+    # PC 0.6.0+: owners only; shutdown waits SHUTDOWN_DELAY_S so it can be cancelled
+    "pc_lock",
+    "pc_sleep",
+    "pc_shutdown",
+    "pc_cancel_shutdown",
+    "open_url",  # PC 0.6.0+, args: url (http/https) - "Share to TV" and the Open a link box
 ]
 
 PointerAction = Literal[
@@ -75,6 +83,7 @@ class NowPlaying(_Model):
     position_s: float = 0.0
     duration_s: float = 0.0
     thumbnail_url: str | None = None
+    app: str | None = Field(default=None, max_length=40)  # PC 0.6.0+: "Spotify" (not the TV tab)
 
 
 class TimerInfo(_Model):
@@ -151,14 +160,28 @@ class RoomState(_Model):
 
 
 class PairRequestPayload(_Model):
-    room_secret: str
+    room_secret: str = ""  # from the QR; empty when pairing with a typed code
     device_name: str = Field(max_length=64)
+    # The short code under the QR (PC/relay 0.6.0+), e.g. "K7QM4XPA"; see pair_codes.py.
+    pair_code: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]{8,9}$")
 
 
 class PairGrantedPayload(_Model):
     device_id: str
     device_token: str
     expires_at: float
+    room_id: str | None = None  # set when pairing by code: the phone did not know its room
+
+
+class PairCodePayload(_Model):
+    """PC -> relay: accept this pairing code (only its SHA-256) for a while."""
+
+    code_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expires_s: int = Field(ge=30, le=900)
+
+
+class PairCodeOkPayload(_Model):
+    code_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class PairDeniedPayload(_Model):
@@ -173,7 +196,18 @@ class CmdButtonPayload(_Model):
 
     @model_validator(mode="after")
     def _slider_args(self) -> CmdButtonPayload:
-        """The two slider actions carry one number each; nothing else rides along."""
+        """The two slider actions carry one number each, open_url one web address; nothing else
+        rides along."""
+        if self.action == "open_url":
+            url = self.args.get("url")
+            if (
+                set(self.args) != {"url"}
+                or not isinstance(url, str)
+                or len(url) > MAX_URL_LEN
+                or not re.match(r"^https?://[^\s]+$", url, re.IGNORECASE)
+            ):
+                raise ValueError("open_url needs only url: an http(s) address")
+            return self
         key = {"volume_set": "level", "seek_to": "position_s"}.get(self.action)
         if key is None:
             return self
@@ -430,6 +464,20 @@ class RoomDeleted(_EnvelopeBase):
     payload: Empty = Field(default_factory=Empty)
 
 
+class PairCode(_EnvelopeBase):
+    """PC -> relay (0.6.0+): register the short pairing code shown under the QR."""
+
+    type: Literal["pair.code"] = "pair.code"
+    payload: PairCodePayload
+
+
+class PairCodeOk(_EnvelopeBase):
+    """Relay -> PC: the code is stored; the TV may show it."""
+
+    type: Literal["pair.code.ok"] = "pair.code.ok"
+    payload: PairCodeOkPayload
+
+
 class Ping(_EnvelopeBase):
     type: Literal["ping"] = "ping"
     payload: Empty = Field(default_factory=Empty)
@@ -467,6 +515,8 @@ Message = Annotated[
     | RoomKey
     | RoomDelete
     | RoomDeleted
+    | PairCode
+    | PairCodeOk
     | DeviceRevoke
     | Ping
     | Pong

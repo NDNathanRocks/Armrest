@@ -15,7 +15,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from langgraph.graph import END, StateGraph
 from pydantic import ValidationError
@@ -28,6 +28,7 @@ from agent.policy import (
     normalize_keys,
     on_media_site,
     sanitize_untrusted,
+    shared_url_allowed,
     url_allowed,
 )
 from agent.prompts import (
@@ -49,12 +50,20 @@ from bookmarks import BookmarkStore
 from browser_prefs import BrowserPrefs
 from command_queue import CommandRequest
 from contracts import AskPrompt, CmdResultPayload, Suggestion
-from executors.base import ActionResult, Browser, MediaKey, OSController
+from executors.base import (
+    SHUTDOWN_DELAY_S,
+    ActionResult,
+    Browser,
+    MediaKey,
+    OSController,
+    PowerAction,
+)
 from executors.page_items import NO_SEARCH_BAR, NO_SUBTITLES
 from executors.subtitles import SubtitleController, language_name
 from executors.video_fullscreener import VideoFullscreener
 from executors.vision_grounding import VisionGrounder
 from llm.base import LLMError, TextLLM, brain_message
+from media_sessions import AppCommand, MediaApps
 from remote_input import key_combo_allowed
 from telemetry import AttrValue, Span, Telemetry, new_trace_id
 from timers import TimerService
@@ -75,7 +84,8 @@ VISION_ELIGIBLE = {
 }
 # Ops only the user's own words (fastpath) may produce. The router prompt never offers them, but
 # a web page that steers the model could still name them, so they are refused in code.
-USER_ONLY_OPS = {"press_key", "qr_control", "bookmark", "browser_pref", "type"}
+USER_ONLY_OPS = {"press_key", "qr_control", "bookmark", "browser_pref", "type", "power", "open_url"}
+POWER_ACTIONS: frozenset[PowerAction] = frozenset({"lock", "sleep", "shutdown", "cancel_shutdown"})
 BROWSER_MEDIA = {"play", "pause", "play_pause", "next", "prev"}
 OS_FALLBACK_KEYS: dict[str, MediaKey] = {"play_pause": "play_pause", "next": "next", "prev": "prev"}
 FAIL_MESSAGE = "Sorry, that did not work. Try again."
@@ -85,7 +95,13 @@ ROUTER_BUDGET_S = 60.0
 ROUTER_REPAIR_MIN_S = 10.0  # do not start the repair retry with less time than this left
 LEAVE_PAGE_MESSAGE = "I stayed on this page. Say 'search' or 'YouTube' if you want me to leave it."
 # Failures that retrying cannot fix: end the command now with the step's own message.
-TERMINAL_REASONS = {"off_site", "item_not_found", "no_history", "no_search_bar"}
+TERMINAL_REASONS = {
+    "off_site",
+    "item_not_found",
+    "no_history",
+    "no_search_bar",
+    "nothing_to_cancel",
+}
 BROWSER_NAV_ACTIONS = frozenset(
     {
         "back",
@@ -204,6 +220,7 @@ class AgentDeps:
     progress: ProgressFn = lambda *_: None
     verify_delays_s: tuple[float, ...] = (0.0, 0.4, 0.8)
     is_guest: Callable[[str], bool] = lambda _device_id: False  # set by main (roles.py)
+    media_apps: MediaApps | None = None  # Spotify, VLC...: Windows media sessions (None = keys)
 
 
 def extract_json(text: str) -> str:
@@ -241,6 +258,16 @@ def success_message(plan: IntentPlan) -> str:
             }.get(str(step.args.get("action")), "Done")
         if step.op == "browser_pref":
             return "Pop-up protection on" if step.args.get("adblock") else "Pop-up protection off"
+        if step.op == "power":
+            return {
+                "lock": "PC locked",
+                "sleep": "The PC is going to sleep",
+                "shutdown": f"Shutting down in {SHUTDOWN_DELAY_S} seconds. "
+                "Say “cancel the shutdown” to stop it",
+                "cancel_shutdown": "Shutdown cancelled",
+            }.get(str(step.args.get("action")), "Done")
+        if step.op == "open_url":
+            return "Opened your link on the TV"
     several = written_message(plan)
     if several is not None:
         return several
@@ -569,6 +596,16 @@ def build_graph(deps: AgentDeps) -> Any:
             return await deps.browser.browser_action(action)
         if op == "sleep_display":
             return await deps.os_ctl.sleep_display()
+        if op == "power":
+            action = str(a.get("action", ""))
+            if action not in POWER_ACTIONS:
+                return ActionResult(False, "os", f"unknown power action: {action}", "unsupported")
+            return await deps.os_ctl.power(action)  # narrowed by the POWER_ACTIONS check
+        if op == "open_url":
+            url = str(a.get("url", ""))
+            if not shared_url_allowed(url):
+                return ActionResult(False, "dom", "I can only open web links", "blocked")
+            return await deps.browser.open_saved(url)
         if op == "voice_pref":
             if deps.voice is None:
                 return ActionResult(
@@ -650,8 +687,26 @@ def build_graph(deps: AgentDeps) -> Any:
     async def run_media_key(a: dict[str, str | int | float | bool]) -> ActionResult:
         key = str(a["key"])
         if key in BROWSER_MEDIA:
-            res = await deps.browser.media_command(key)  # type: ignore[arg-type]
-            if res.ok or key not in OS_FALLBACK_KEYS:
+            cmd = cast(AppCommand, key)
+            apps = deps.media_apps
+            app = await apps.current() if apps is not None else None
+            if (
+                apps is not None
+                and app is not None
+                and app.is_playing
+                and not (await deps.browser.snapshot()).is_playing
+            ):  # Spotify is playing and the TV tab is not: the button is meant for Spotify
+                res = await apps.command(cmd)
+                if res.ok:
+                    return res
+            res = await deps.browser.media_command(cmd)
+            if res.ok:
+                return res
+            if apps is not None and app is not None:  # nothing in the tab: the open app
+                via_app = await apps.command(cmd)
+                if via_app.ok:
+                    return via_app
+            if key not in OS_FALLBACK_KEYS:
                 return res
             return await deps.os_ctl.press_media_key(OS_FALLBACK_KEYS[key])  # OS media key fallback
         if key == "mute":
@@ -805,10 +860,13 @@ def build_graph(deps: AgentDeps) -> Any:
             "ad_showing": snap.ad_showing,
         }
         passed: bool
-        if predicate == "video_playing":
-            passed = snap.is_playing is True
-        elif predicate == "paused":
-            passed = snap.is_playing is not True
+        if predicate in ("video_playing", "paused"):
+            want_playing = predicate == "video_playing"
+            passed = (snap.is_playing is True) == want_playing
+            if not passed and deps.media_apps is not None and snap.is_playing is not True:
+                app = await deps.media_apps.current()  # the button may have gone to Spotify
+                passed = app is not None and app.is_playing == want_playing
+                observed["app_playing"] = app.is_playing if app is not None else None
         elif predicate == "is_fullscreen":
             passed = snap.is_fullscreen
         elif predicate == "no_ad":
@@ -967,7 +1025,7 @@ class AgentRunner:
             memory.set_pending(req.device_id, ask.question, ask.choices)
 
     def initial_state(self, req: CommandRequest) -> AgentState:
-        plan = plan_button(req.action) if req.kind == "button" and req.action else None
+        plan = plan_button(req.action, req.args) if req.kind == "button" and req.action else None
         utterance = f"button:{req.action}" if plan else (req.text or "")
         return AgentState(
             trace_id=new_trace_id(),

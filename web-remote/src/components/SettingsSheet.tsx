@@ -4,7 +4,9 @@ import type { Tv } from "../utils/tvs";
 import type { VoicePrefs } from "../protocol";
 import type { MicMode } from "../hooks/useVoice";
 import { resetAppCache } from "../utils/resetCache";
+import type { PairParams } from "../connection/roomConnection";
 import { Icon } from "./Icon";
+import { PairPanel } from "./PairPanel";
 
 type Style = VoicePrefs["style"];
 type Voice = VoicePrefs["voice"];
@@ -52,6 +54,71 @@ interface Props {
   /** A guest phone: the PC refuses its settings changes, so they are not offered. */
   guest?: boolean;
   onRenameTv?: (roomId: string, label: string) => void;
+  /** Lock / sleep / shut down the PC: owners of a 0.6.0+ PC only (absent = not offered). */
+  onPower?: (action: PowerAction) => void;
+  /** Add another TV from inside the app (scan its QR or type its code). */
+  onScan?: (params: PairParams) => void;
+  onCode?: (code: string) => void;
+}
+
+export type PowerAction = "pc_lock" | "pc_sleep" | "pc_shutdown" | "pc_cancel_shutdown";
+
+/** Lock right away; sleep and shut down ask first (a sleeping PC can't be woken from the phone). */
+function PowerSection({ disabled, onPower }: { disabled: boolean; onPower: (action: PowerAction) => void }) {
+  const [asking, setAsking] = useState<"pc_sleep" | "pc_shutdown" | null>(null);
+  const question = {
+    pc_sleep: "Put the PC to sleep? You can't wake it from this phone: use its power button or keyboard.",
+    pc_shutdown: "Shut the PC down in 1 minute? Everything closes. You can still cancel during that minute.",
+  };
+  const button = "press flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl bg-surface text-xs ring-1 ring-line disabled:opacity-40";
+  return (
+    <section aria-labelledby="power-h" className="mt-6 space-y-2">
+      <h3 id="power-h" className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        PC power
+      </h3>
+      {asking ? (
+        <div className="space-y-2 rounded-2xl bg-surface p-4 ring-1 ring-line" role="alertdialog" aria-label="Confirm">
+          <p className="text-sm">{question[asking]}</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setAsking(null)} className="press min-h-11 flex-1 rounded-xl ring-1 ring-line">
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                onPower(asking);
+                setAsking(null);
+              }}
+              className="press min-h-11 flex-1 rounded-xl bg-rose-500 font-semibold text-white disabled:opacity-40"
+            >
+              {asking === "pc_sleep" ? "Sleep" : "Shut down"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          <button type="button" disabled={disabled} onClick={() => onPower("pc_lock")} className={button}>
+            <Icon name="lock" size={18} /> Lock
+          </button>
+          <button type="button" disabled={disabled} onClick={() => setAsking("pc_sleep")} className={button}>
+            <Icon name="moon" size={18} /> Sleep
+          </button>
+          <button type="button" disabled={disabled} onClick={() => setAsking("pc_shutdown")} className={button}>
+            <Icon name="power" size={18} /> Shut down
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onPower("pc_cancel_shutdown")}
+        className="min-h-11 w-full rounded-xl text-sm text-muted ring-1 ring-line active:bg-surface disabled:opacity-40"
+      >
+        Cancel a shutdown
+      </button>
+    </section>
+  );
 }
 
 export function SettingsSheet({
@@ -68,8 +135,12 @@ export function SettingsSheet({
   currentRoom = null,
   onRenameTv,
   guest = false,
+  onPower,
+  onScan,
+  onCode,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [addingTv, setAddingTv] = useState(false);
   useEffect(() => {
     closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -241,6 +312,8 @@ export function SettingsSheet({
             Reset QR code
           </button>
         </section>
+
+        {onPower && <PowerSection disabled={disabled} onPower={onPower} />}
           </>
         )}
 
@@ -292,7 +365,17 @@ export function SettingsSheet({
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-zinc-500">To add another TV, scan the QR code on it with this phone's camera.</p>
+          {addingTv && onScan && onCode ? (
+            <PairPanel onScan={onScan} onCode={onCode} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingTv(true)}
+              className="press mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-surface text-sm ring-1 ring-line"
+            >
+              <Icon name="plus" size={16} /> Add another TV
+            </button>
+          )}
         </section>
         <button
           type="button"

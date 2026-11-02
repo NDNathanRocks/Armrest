@@ -9,12 +9,14 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import logging
+import subprocess
 import sys
+import threading
 from collections.abc import Callable
 from typing import Any
 
 from agent.policy import key_allowed
-from executors.base import ActionResult, MediaKey
+from executors.base import SHUTDOWN_DELAY_S, ActionResult, MediaKey, PowerAction
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +108,44 @@ def _send_unicode(ch: str) -> None:
 
 def _send_vk(vk: int) -> None:
     _send_key_events([(vk, 0, 0), (vk, 0, KEYEVENTF_KEYUP)])
+
+
+SLEEP_AFTER_S = 3.0  # long enough for the reply (and a spoken "Going to sleep") to get out
+CREATE_NO_WINDOW = 0x08000000
+ERROR_SHUTDOWN_IN_PROGRESS = 1115
+ERROR_NO_SHUTDOWN_IN_PROGRESS = 1116
+ERROR_SHUTDOWN_IS_SCHEDULED = 1190
+
+
+def _lock() -> ActionResult:
+    if not ctypes.windll.user32.LockWorkStation():
+        return ActionResult(False, "os", "Windows would not lock")
+    return ActionResult(True, "os")
+
+
+def _sleep_in_thread() -> None:
+    def suspend() -> None:
+        # (hibernate=False, force=False, wake events allowed=False): plain sleep
+        if not ctypes.windll.powrprof.SetSuspendState(False, False, False):
+            log.warning("sleep was refused by Windows (error %s)", ctypes.GetLastError())
+
+    threading.Thread(target=suspend, name="pc-sleep", daemon=True).start()
+
+
+def _shutdown(action: PowerAction) -> ActionResult:
+    """shutdown.exe returns at once; /t gives a countdown Windows itself shows and /a cancels."""
+    if action == "shutdown":
+        args = ["shutdown", "/s", "/t", str(SHUTDOWN_DELAY_S), "/c", "Armrest: shutting down"]
+    else:
+        args = ["shutdown", "/a"]
+    code = subprocess.run(args, capture_output=True, creationflags=CREATE_NO_WINDOW).returncode
+    if code == 0 or (action == "shutdown" and code == ERROR_SHUTDOWN_IS_SCHEDULED):
+        return ActionResult(True, "os")
+    if action == "cancel_shutdown" and code == ERROR_NO_SHUTDOWN_IN_PROGRESS:
+        return ActionResult(False, "os", "There is no shutdown to cancel", "nothing_to_cancel")
+    if code == ERROR_SHUTDOWN_IN_PROGRESS:
+        return ActionResult(False, "os", "Windows is already shutting down", "unsupported")
+    return ActionResult(False, "os", f"shutdown.exe failed ({code})")
 
 
 class WindowsOS:
@@ -251,6 +291,15 @@ class WindowsOS:
             return ActionResult(True, "os")
 
         return await self._run(off)
+
+    async def power(self, action: PowerAction) -> ActionResult:
+        if action == "lock":
+            return await self._run(_lock)
+        if action == "sleep":
+            # SetSuspendState only returns after the PC wakes: answer the phone first.
+            asyncio.get_running_loop().call_later(SLEEP_AFTER_S, _sleep_in_thread)
+            return ActionResult(True, "os")
+        return await self._run(lambda: _shutdown(action))
 
     def keep_awake(self, enabled: bool) -> None:
         flags = ES_CONTINUOUS

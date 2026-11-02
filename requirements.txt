@@ -26,4 +26,7 @@ cryptography>=43,<51  # checks licence keys of the direct download (Ed25519, off
 winrt-runtime>=3,<5; sys_platform == "win32"
 winrt-Windows.Foundation>=3; sys_platform == "win32"
 winrt-Windows.Services.Store>=3; sys_platform == "win32"
+# what Spotify, VLC and other media apps are playing, and their play/pause/next (media_sessions.py)
+winrt-Windows.Media.Control>=3; sys_platform == "win32"
+winrt-Windows.Storage.Streams>=3; sys_platform == "win32"  # types the media properties reference
 edge-tts>=7,<8  # free Microsoft neural voices for spoken replies

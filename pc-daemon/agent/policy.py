@@ -41,8 +41,11 @@ MEDIA_HOSTS: frozenset[str] = frozenset(
 
 
 # What a guest phone may not do (roles.py): drive the keyboard, reset the pairing QR, change the
-# PC's own settings, or delete saved pages. Media, volume, search and opening sites stay open.
-GUEST_BLOCKED_OPS = frozenset({"press_key", "type", "qr_control", "browser_pref", "voice_pref"})
+# PC's own settings, delete saved pages, or lock, sleep or shut down the PC. Media, volume,
+# search and opening streaming sites stay open.
+GUEST_BLOCKED_OPS = frozenset(
+    {"press_key", "type", "qr_control", "browser_pref", "voice_pref", "power"}
+)
 GUEST_REFUSAL = "Guests can't do that. Ask the person who owns this TV."
 
 
@@ -53,7 +56,19 @@ def guest_refusal(ops_and_args: list[tuple[str, dict[str, object]]]) -> str | No
             return GUEST_REFUSAL
         if op == "bookmark" and args.get("action") == "remove":
             return GUEST_REFUSAL
+        if op == "open_url" and not url_allowed(str(args.get("url", ""))):
+            return "Guests can share links from streaming sites only."
     return None
+
+
+def shared_url_allowed(url: str) -> bool:
+    """A link the phone's owner shared or pasted: any http(s) page, but no logins in the URL
+    and nothing the browser would run instead of load (javascript:, file:, ...)."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    return parts.scheme in ("http", "https") and bool(parts.hostname) and not parts.username
 
 
 def normalize_keys(keys: str) -> str:

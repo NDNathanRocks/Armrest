@@ -12,6 +12,8 @@ from executors.page_items import Candidate
 Tier = Literal["dom", "js", "vision", "os"]
 MediaCommand = Literal["play", "pause", "play_pause", "next", "prev"]
 MediaKey = Literal["play_pause", "next", "prev", "vol_up", "vol_down", "mute"]
+PowerAction = Literal["lock", "sleep", "shutdown", "cancel_shutdown"]
+SHUTDOWN_DELAY_S = 60  # time to change your mind: "cancel the shutdown" stops it
 
 
 @dataclass(frozen=True)
@@ -110,4 +112,7 @@ class OSController(Protocol):
     async def press_key(self, key: str, mods: tuple[str, ...]) -> ActionResult: ...
     async def type_text(self, text: str) -> ActionResult: ...
     async def sleep_display(self) -> ActionResult: ...
+    # Lock, sleep, shut down after SHUTDOWN_DELAY_S, or cancel that. Returns before the PC goes
+    # to sleep, so the phone still gets the answer.
+    async def power(self, action: PowerAction) -> ActionResult: ...
     def keep_awake(self, enabled: bool) -> None: ...

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 ToastKind = Literal["ok", "error", "info"]
@@ -33,6 +33,7 @@ class QrCard:
     url: str
     transport: Literal["cloud", "lan"]
     caption: str
+    code: str | None = None  # "K7QM-4XPA": typed into the app instead of scanning
 
 
 @dataclass(frozen=True)
@@ -68,9 +69,11 @@ class HudViewModel:
         qr_linger_s: float = 10.0,
         qr_requested_s: float = 90.0,
         badge_hide_s: float = 10.0,
+        pair_code: Callable[[str], str | None] = lambda _transport: None,
     ) -> None:
         self._cloud_url = cloud_url
         self._lan_url = lan_url
+        self._pair_code = pair_code  # transport -> the code to show under the QR, if it works
         self._clock = clock
         self._ttl = toast_ttl_s
         self._max = max_toasts
@@ -185,12 +188,14 @@ class HudViewModel:
         lan, cloud = self._lan_url(), self._cloud_url()
         # With the internet down only the LAN address can work, so it wins.
         if self._mode == "lan" and lan:
-            return QrCard(lan, "lan", "Scan to pair · local network")
-        if cloud:
-            return QrCard(cloud, "cloud", "Scan to pair")
-        if lan:
-            return QrCard(lan, "lan", "Scan to pair · local network")
-        return None
+            card = QrCard(lan, "lan", "Scan to pair · local network")
+        elif cloud:
+            card = QrCard(cloud, "cloud", "Scan to pair")
+        elif lan:
+            card = QrCard(lan, "lan", "Scan to pair · local network")
+        else:
+            return None
+        return replace(card, code=self._pair_code(card.transport))
 
     def frame(self) -> HudFrame:
         now = self._clock()

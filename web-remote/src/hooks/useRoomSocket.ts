@@ -26,7 +26,11 @@ export interface RoomSocketOptions {
 }
 
 export interface RoomActions {
-  sendButton(action: QuickAction): boolean;
+  sendButton(action: QuickAction, args?: Record<string, string | number | boolean>): boolean;
+  /** A QR read by the in-app scanner: pair with that TV (another TV is added to the list). */
+  pairWith(params: PairParams): void;
+  /** The short code typed from under the TV's QR. */
+  pairWithCode(code: string): void;
   sendSlider(action: "volume_set" | "seek_to", value: number): boolean;
   sendText(text: string): boolean;
   sendAudio(recording: Recording): boolean;
@@ -93,7 +97,9 @@ export function useRoomSocket(options: RoomSocketOptions): { view: RoomView; act
 
   const actions = useMemo<RoomActions>(
     () => ({
-      sendButton: (a) => connection.current?.sendButton(a) ?? false,
+      sendButton: (a, args) => connection.current?.sendButton(a, args) ?? false,
+      pairWith: (params) => void connection.current?.start(params),
+      pairWithCode: (code) => connection.current?.startWithCode(code),
       sendSlider: (a, v) => connection.current?.sendSlider(a, v) ?? false,
       sendText: (t) => connection.current?.sendText(t) ?? false,
       sendAudio: (r) => connection.current?.sendAudio(r) ?? false,

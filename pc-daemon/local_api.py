@@ -108,6 +108,7 @@ def create_app(
     *,
     token_verifier: TokenVerifier | None = None,
     pairing: PairingFn | None = None,
+    code_pairing: PairingFn | None = None,  # (typed code, device_name), see pair_codes.py
     trust_loopback: bool = True,
     allowed_origins: list[str] | None = None,
     keepalive_s: float = 15.0,
@@ -302,10 +303,17 @@ def create_app(
                     if not isinstance(msg, PairRequest) or pairing is None:
                         await send_error("unauthorized", "Pair this device first", msg.id)
                         continue
-                    granted = pairing(msg.payload.room_secret, msg.payload.device_name)
+                    code = msg.payload.pair_code
+                    if code is not None:
+                        granted = (
+                            code_pairing(code, msg.payload.device_name) if code_pairing else None
+                        )
+                    else:
+                        granted = pairing(msg.payload.room_secret, msg.payload.device_name)
                     if granted is None:
                         failures += 1
-                        denied = PairDeniedPayload(reason="invalid_secret")
+                        reason = "invalid_code" if code is not None else "invalid_secret"
+                        denied = PairDeniedPayload(reason=reason)
                         denial = envelope(PairDenied, service.room_id, denied, reply_to=msg.id)
                         await ws.send_text(dump_message(denial))
                         if failures >= MAX_PAIR_FAILURES:

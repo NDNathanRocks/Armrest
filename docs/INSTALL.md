@@ -109,8 +109,9 @@ Logs are in `%LOCALAPPDATA%\Armrest\logs`. They never contain pairing links or s
 | `ARMREST_PWA_BASE_URL` | set by the installer | Where the phone app is hosted; the QR code points here |
 | `ARMREST_STT_DEVICE` | `auto` | Speech recognition on `auto` (the GPU if there is one), `cuda` or `cpu` |
 | `ARMREST_STT_MODEL` | `auto` | Whisper model. `auto` = `large-v3-turbo` with an NVIDIA GPU, `small` without; set `base` on a very weak PC |
-| `ARMREST_GROQ_API_KEY` | none | Free cloud speech-to-text, used only if local speech fails |
-| `ARMREST_ROUTER_PROVIDER` | `auto` | The AI helper: `auto` = Gemini when `ARMREST_GEMINI_API_KEY` is set, else a local Ollama model (the other is the fallback); or force `ollama` / `gemini` |
+| `ARMREST_GROQ_API_KEY` | none | Free key from console.groq.com: a fast backup AI helper when Gemini is busy, and cloud speech-to-text if local speech fails |
+| `ARMREST_ROUTER_PROVIDER` | `auto` | The AI helper: `auto` = Gemini, then Groq, then the local Ollama model (each one that has a key); `groq` = Groq first; `gemini` = Gemini first; `ollama` = commands never leave this PC |
+| `ARMREST_GROQ_TEXT_MODEL` | `llama-3.3-70b-versatile` | The Groq model the AI helper uses |
 | `ARMREST_OLLAMA_TEXT_MODEL` / `ARMREST_OLLAMA_VLM_MODEL` | `auto` / `qwen2.5vl:7b` | Local models. `auto` = `qwen2.5:7b` with an NVIDIA GPU, `phi4-mini` without. **Set up AI brain** (Start menu) downloads them |
 | `ARMREST_GEMINI_API_KEY` | none | Free Gemini key for understanding free-form commands and finding buttons on screen |
 | `ARMREST_SUBTITLE_LANG` | `en` | The language "turn on subtitles" picks when you don't name one (`en`, `es`, `fr`, `de`...) |

@@ -54,9 +54,17 @@ export interface ConnectionOptions {
 type Mode =
   | { kind: "none" }
   | { kind: "token"; pairing: Pairing }
-  | { kind: "pair"; roomId: string; secret: string };
+  | { kind: "pair"; roomId: string; secret: string }
+  | { kind: "code"; code: string };
+
+/** "k7qm-4xpa " -> "K7QM4XPA"; null unless it can be a TV code (pc-daemon/pair_codes.py). */
+export function normalizeCode(typed: string): string | null {
+  const code = typed.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return /^[A-HJ-NP-Z2-9]{8}$/.test(code) ? code : null;
+}
 
 const TOKEN_FAILURES_BEFORE_REPAIR_HINT = 3;
+export const CODE_FAILED = "That code didn't work. Check it, or ask the TV for a new one (say \"pair a friend\").";
 // After repeated handshake failures keep trying, but gently: 15 s is quick enough to feel
 // recovered once an outage ends, cheap enough that a revoked token costs almost nothing.
 const SLOW_RETRY_MS = 15_000;
@@ -106,6 +114,16 @@ export class RoomConnection {
     this.detachSocket(1000);
   }
 
+  /** The short code typed from under the TV's QR. One try: a wrong code ends with pair.denied. */
+  startWithCode(code: string): void {
+    this.generation++;
+    this.clearTimers();
+    this.detachSocket(1000);
+    this.handshakeFailures = 0;
+    this.mode = { kind: "code", code };
+    this.connect();
+  }
+
   async unpair(): Promise<void> {
     this.stop();
     this.mode = { kind: "none" };
@@ -120,10 +138,13 @@ export class RoomConnection {
     if (this.mode.kind === "none") return;
     this.clearTimers();
     const { endpoint, deviceName } = this.opts;
+    const mode = this.mode;
     const url =
-      this.mode.kind === "token"
-        ? endpoint.tokenUrl({ roomId: this.mode.pairing.roomId, token: this.mode.pairing.deviceToken, name: deviceName })
-        : endpoint.pairUrl({ roomId: this.mode.roomId, name: deviceName });
+      mode.kind === "token"
+        ? endpoint.tokenUrl({ roomId: mode.pairing.roomId, token: mode.pairing.deviceToken, name: deviceName })
+        : mode.kind === "code"
+          ? endpoint.codeUrl({ code: mode.code, name: deviceName })
+          : endpoint.pairUrl({ roomId: mode.roomId, name: deviceName });
     this.opts.dispatch({ type: "connection", connection: "connecting", at: this.now() });
     let sock: SocketLike;
     try {
@@ -143,6 +164,8 @@ export class RoomConnection {
       this.opts.dispatch({ type: "connection", connection: "online", at: this.now() });
       if (this.mode.kind === "pair") {
         this.send("pair.request", { room_secret: this.mode.secret, device_name: this.opts.deviceName });
+      } else if (this.mode.kind === "code") {
+        this.send("pair.request", { pair_code: this.mode.code, device_name: this.opts.deviceName });
       } else {
         this.send("state.sync", {});
       }
@@ -164,7 +187,14 @@ export class RoomConnection {
     const msg = parseIncoming(data);
     if (!msg) return;
     if (msg.type === "pair.granted") {
-      const roomId = this.mode.kind === "pair" ? this.mode.roomId : this.mode.kind === "token" ? this.mode.pairing.roomId : "";
+      const roomId =
+        this.mode.kind === "pair"
+          ? this.mode.roomId
+          : this.mode.kind === "token"
+            ? this.mode.pairing.roomId
+            : this.mode.kind === "code"
+              ? (msg.payload.room_id ?? msg.room_id) // the code named the room for us
+              : "";
       if (!roomId) return;
       const pairing: Pairing = {
         roomId,
@@ -174,11 +204,15 @@ export class RoomConnection {
         deviceName: this.opts.deviceName,
       };
       await this.opts.storage.save(pairing);
-      const firstPairing = this.mode.kind === "pair";
+      const firstPairing = this.mode.kind === "pair" || this.mode.kind === "code";
       this.mode = { kind: "token", pairing };
       this.opts.onPaired?.(pairing);
       this.opts.dispatch({ type: "msg", msg });
       if (firstPairing) this.send("state.sync", {}); // ask for the current TV state
+      return;
+    }
+    if (msg.type === "pair.denied" && this.mode.kind === "code") {
+      this.codeFailed();
       return;
     }
     if (msg.type === "pair.denied") {
@@ -196,6 +230,11 @@ export class RoomConnection {
     this.stopHeartbeat();
     this.socket = null;
     if (this.mode.kind === "none") return;
+    if (this.mode.kind === "code") {
+      // Refused at the door (wrong, used or expired code, or too many tries): never retry it.
+      this.codeFailed();
+      return;
+    }
     if (!this.opened && this.mode.kind === "token") {
       // The handshake itself failed: a revoked/expired token looks exactly like this.
       this.handshakeFailures++;
@@ -291,9 +330,9 @@ export class RoomConnection {
     return false;
   }
 
-  sendButton(action: QuickAction): boolean {
+  sendButton(action: QuickAction, args: Record<string, string | number | boolean> = {}): boolean {
     const commandId = uuid();
-    const id = this.send("cmd.button", { command_id: commandId, idempotency_key: uuid(), action, args: {} });
+    const id = this.send("cmd.button", { command_id: commandId, idempotency_key: uuid(), action, args });
     if (!id) return this.notConnected();
     this.opts.dispatch({ type: "sent", messageId: id, commandId, label: "Sending...", at: this.now() });
     return true;
@@ -368,6 +407,15 @@ export class RoomConnection {
   }
 
   // ------------------------------------------------------------------ helpers
+
+  /** A typed code did not work: say so, and go back to the TV this phone already had, if any. */
+  private codeFailed(): void {
+    this.mode = { kind: "none" };
+    this.clearTimers();
+    this.detachSocket(1000);
+    this.opts.dispatch({ type: "toast", toast: { id: uuid(), kind: "error", text: CODE_FAILED, mine: true } });
+    void this.start(null); // a saved pairing reconnects; with none the app shows the pairing page
+  }
 
   private detachSocket(code: number): void {
     const sock = this.socket;

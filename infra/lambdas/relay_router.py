@@ -13,6 +13,7 @@ from common.ddb import Store
 from common.models import (
     COMMAND_TYPES,
     DEVICE_ID_RE,
+    HEX64_RE,
     IDEMPOTENT_TYPES,
     PC_BROADCAST_TYPES,
     PHONE_TYPES,
@@ -28,6 +29,7 @@ from common.runtime import get_gateway, get_store
 log = logging.getLogger(__name__)
 
 MAX_PAIR_FAILURES = 5
+MIN_CODE_TTL_S, MAX_CODE_TTL_S = 30, 900  # contracts.PairCodePayload.expires_s
 OK = {"statusCode": 200}
 
 
@@ -87,6 +89,8 @@ def _from_pc(store: Store, gw: Gateway, conn_id: str, room_id: str, msg: dict[st
         _revoke(store, gw, conn_id, room_id, msg)
     elif kind == "room.delete":
         _delete_room(store, gw, conn_id, room_id, msg)
+    elif kind == "pair.code":
+        _register_code(store, gw, conn_id, room_id, msg)
     elif kind == "ping":
         gw.send(conn_id, build("pong", room_id, {}, msg["id"]))
     elif kind != "pong":
@@ -113,6 +117,27 @@ def _revoke(store: Store, gw: Gateway, conn_id: str, room_id: str, msg: dict[str
         if conn.get("device_id") == device_id:
             gw.close(str(conn["connection_id"]))
     broadcast_presence(store, gw, room_id)
+
+
+def _register_code(
+    store: Store, gw: Gateway, conn_id: str, room_id: str, msg: dict[str, Any]
+) -> None:
+    """The PC shows a short pairing code under its QR: remember its hash for a while."""
+    payload = msg["payload"]
+    code_hash, expires_s = payload.get("code_hash"), payload.get("expires_s")
+    if (
+        not isinstance(code_hash, str)
+        or not HEX64_RE.match(code_hash)
+        or not isinstance(expires_s, int)
+        or isinstance(expires_s, bool)
+        or not MIN_CODE_TTL_S <= expires_s <= MAX_CODE_TTL_S
+    ):
+        _error(gw, conn_id, room_id, "bad_message", "code_hash and expires_s", reply_to=msg["id"])
+        return
+    if not store.put_pair_code(code_hash, room_id, expires_s):
+        _error(gw, conn_id, room_id, "code_taken", "Pick another code", reply_to=msg["id"])
+        return
+    gw.send(conn_id, build("pair.code.ok", room_id, {"code_hash": code_hash}, msg["id"]))
 
 
 def _delete_room(
@@ -182,19 +207,35 @@ def _pair(
 ) -> None:
     conn_id = str(conn["connection_id"])
     payload = msg["payload"]
-    secret, name = payload.get("room_secret"), payload.get("device_name")
-    room = store.get_room(room_id)
-    valid = (
-        room is not None
-        and isinstance(secret, str)
-        and isinstance(name, str)
-        and 0 < len(name) <= 64
-        and auth.equals(str(room["room_secret_hash"]), auth.sha256_hex(secret))
+    secret, name, code = (
+        payload.get("room_secret"),
+        payload.get("device_name"),
+        payload.get("pair_code"),
     )
+    named = isinstance(name, str) and 0 < len(name) <= 64
+    if code is not None:  # typed from the TV: one use, and only on the connection it opened
+        expected = conn.get("pair_code_hash")
+        valid = (
+            named
+            and isinstance(code, str)
+            and isinstance(expected, str)
+            and auth.equals(expected, auth.sha256_hex(_normal_code(code)))
+            and store.consume_pair_code(expected, room_id)
+        )
+        reason = "invalid_code"
+    else:
+        room = store.get_room(room_id)
+        valid = (
+            room is not None
+            and isinstance(secret, str)
+            and named
+            and auth.equals(str(room["room_secret_hash"]), auth.sha256_hex(secret))
+        )
+        reason = "invalid_secret"
     if not valid:
         failures = store.record_pair_failure(conn_id)
-        gw.send(conn_id, build("pair.denied", room_id, {"reason": "invalid_secret"}, msg["id"]))
-        if failures >= MAX_PAIR_FAILURES:
+        gw.send(conn_id, build("pair.denied", room_id, {"reason": reason}, msg["id"]))
+        if failures >= MAX_PAIR_FAILURES or code is not None:  # a code gets one try per socket
             gw.close(conn_id)
         return
     assert isinstance(name, str)
@@ -203,16 +244,15 @@ def _pair(
     key = auth.derive_room_key(store.master_key(), room_id)
     token, exp = auth.mint_device_token(key, room_id, device_id, time.time())
     store.authenticate_connection(conn_id, device_id, exp)
-    gw.send(
-        conn_id,
-        build(
-            "pair.granted",
-            room_id,
-            {"device_id": device_id, "device_token": token, "expires_at": exp},
-            msg["id"],
-        ),
-    )
+    granted: dict[str, Any] = {"device_id": device_id, "device_token": token, "expires_at": exp}
+    if code is not None:
+        granted["room_id"] = room_id  # the phone only knew the code
+    gw.send(conn_id, build("pair.granted", room_id, granted, msg["id"]))
     broadcast_presence(store, gw, room_id)
+
+
+def _normal_code(code: str) -> str:
+    return "".join(ch for ch in code.upper() if ch.isalnum())
 
 
 def _maybe_refresh_token(

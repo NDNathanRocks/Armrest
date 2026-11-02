@@ -8,7 +8,7 @@ import { Transport } from "../components/Transport";
 import { TimerList, remainingLabel } from "../components/TimerList";
 import { TOAST_MS, Toasts } from "../components/Toasts";
 import { initialView, roomReducer, type RoomView } from "../state/roomReducer";
-import type { Voice } from "../hooks/useVoice";
+import type { Speech } from "../hooks/useSpeech";
 import { incoming } from "./helpers";
 
 const online = (patch: Partial<RoomView> = {}): RoomView => ({
@@ -64,18 +64,37 @@ describe("QRScanner", () => {
   });
 
   it("shows the right guidance for each pairing state", () => {
-    const { rerender, container } = render(<QRScanner connection="idle" hasPairParams={false} paired={false} />);
-    expect(screen.getByText(/Scan the code/)).toBeInTheDocument(); // the landing page for visitors
+    const pair = { onScan: vi.fn(), onCode: vi.fn() };
+    const { rerender, container } = render(<QRScanner connection="idle" hasPairParams={false} paired={false} {...pair} />);
+    // the landing page for visitors: pair from inside the app (a home-screen app can't use the camera app's link)
+    expect(screen.getByRole("button", { name: /Scan the code on the TV/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Type the code instead/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Get Armrest for Windows/ })).toHaveAttribute("href", expect.stringContaining("/get"));
-    rerender(<QRScanner connection="connecting" hasPairParams paired={false} />);
+    rerender(<QRScanner connection="connecting" hasPairParams paired={false} {...pair} />);
     expect(screen.getByText(/Pairing with your TV/)).toBeInTheDocument();
-    rerender(<QRScanner connection="unreachable" hasPairParams={false} paired />);
+    rerender(<QRScanner connection="connecting" hasPairParams={false} paired={false} pairing {...pair} />);
+    expect(screen.getByText(/Pairing with your TV/)).toBeInTheDocument(); // a typed code is being tried
+    rerender(<QRScanner connection="unreachable" hasPairParams={false} paired {...pair} />);
     expect(screen.getByRole("status")).toHaveTextContent(/Can't reach your TV/);
     expect(screen.getByRole("status")).toHaveTextContent(/keep trying/i);
-    rerender(<QRScanner connection="rejected" hasPairParams={false} paired />);
+    rerender(<QRScanner connection="rejected" hasPairParams={false} paired {...pair} />);
     expect(screen.getByRole("alert")).toHaveTextContent(/scan the QR code on the TV again/i);
-    rerender(<QRScanner connection="online" hasPairParams={false} paired />);
+    expect(screen.getByRole("button", { name: /Type the code instead/ })).toBeInTheDocument();
+    rerender(<QRScanner connection="online" hasPairParams={false} paired {...pair} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("takes a typed code with the dash added as you type", () => {
+    const onCode = vi.fn();
+    render(<QRScanner connection="idle" hasPairParams={false} paired={false} onScan={vi.fn()} onCode={onCode} />);
+    fireEvent.click(screen.getByRole("button", { name: /Type the code instead/ }));
+    const box = screen.getByLabelText("Pairing code");
+    fireEvent.change(box, { target: { value: "k7qm4x" } });
+    expect(box).toHaveValue("K7QM-4X");
+    expect(screen.getByRole("button", { name: "Pair" })).toBeDisabled(); // not 8 characters yet
+    fireEvent.change(box, { target: { value: "k7qm4xpa" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    expect(onCode).toHaveBeenCalledWith("K7QM4XPA");
   });
 });
 
@@ -206,15 +225,72 @@ describe("Toasts", () => {
 });
 
 describe("CommandBar", () => {
-  const voice = (over: Partial<Voice> = {}): Voice => ({
+  const voice = (over: Partial<Speech> = {}): Speech => ({
+    engine: "record",
     supported: true,
     active: false,
+    interim: "",
     elapsedMs: 0,
+    armed: false,
     toggle: vi.fn(),
     cancel: vi.fn(),
     holdStart: vi.fn(),
     holdEnd: vi.fn(),
+    arm: vi.fn(),
+    disarm: vi.fn(),
     ...over,
+  });
+
+  it("the phone's speech engine shows the words live and can send early", async () => {
+    const { CommandBar } = await import("../components/CommandBar");
+    const v = voice({ engine: "speech", active: true, interim: "play lofi on" });
+    render(<CommandBar disabled={false} voice={v} micMode="tap" onSend={vi.fn()} />);
+    const panel = screen.getByRole("group", { name: "Listening" });
+    expect(panel).toHaveTextContent("play lofi on");
+    expect(panel).toHaveTextContent(/Sends when you stop talking/);
+    fireEvent.click(screen.getByRole("button", { name: "Send now" }));
+    expect(v.toggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("keyboard dictation: the mic opens the keyboard and the words go by themselves", async () => {
+    vi.useFakeTimers();
+    try {
+      const { CommandBar } = await import("../components/CommandBar");
+      const { AUTO_SEND_MS } = await import("../hooks/useSpeech");
+      const onSend = vi.fn(() => true);
+      const v = voice({ engine: "keyboard" });
+      const { rerender } = render(<CommandBar disabled={false} voice={v} micMode="hold" onSend={onSend} />);
+      const input = screen.getByLabelText("Type a command");
+      fireEvent.click(screen.getByRole("button", { name: "Dictate with the keyboard" })); // hold mode does not apply
+      expect(v.arm).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(input); // focused inside the tap: iOS shows the keyboard
+      const armed = voice({ engine: "keyboard", armed: true });
+      rerender(<CommandBar disabled={false} voice={armed} micMode="hold" onSend={onSend} />);
+      fireEvent.change(input, { target: { value: "pause" } });
+      act(() => void vi.advanceTimersByTime(AUTO_SEND_MS - 200));
+      fireEvent.change(input, { target: { value: "pause the video" } }); // still talking: wait again
+      act(() => void vi.advanceTimersByTime(AUTO_SEND_MS - 200));
+      expect(onSend).not.toHaveBeenCalled();
+      act(() => void vi.advanceTimersByTime(300));
+      expect(onSend).toHaveBeenCalledWith("pause the video");
+      expect(armed.disarm).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("typing without tapping the mic never sends by itself", async () => {
+    vi.useFakeTimers();
+    try {
+      const { CommandBar } = await import("../components/CommandBar");
+      const onSend = vi.fn(() => true);
+      render(<CommandBar disabled={false} voice={voice({ engine: "keyboard" })} micMode="tap" onSend={onSend} />);
+      fireEvent.change(screen.getByLabelText("Type a command"), { target: { value: "half a thought" } });
+      act(() => void vi.advanceTimersByTime(10_000));
+      expect(onSend).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stays editable while offline; only sending is blocked, and the draft is kept", async () => {

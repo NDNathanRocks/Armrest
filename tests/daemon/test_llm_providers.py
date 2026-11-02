@@ -8,6 +8,7 @@ import pytest
 
 from llm.base import LLMError
 from llm.gemini import GeminiClient
+from llm.groq import GroqClient
 from llm.ollama import OllamaClient
 
 
@@ -133,3 +134,70 @@ async def test_gemini_empty_candidates_is_an_error() -> None:
         await gemini(
             httpx.MockTransport(lambda r: httpx.Response(200, json={"candidates": []})), []
         ).complete("s", "u")
+
+
+def groq(handler: httpx.MockTransport, sleeps: list[float]) -> GroqClient:
+    async def sleep(s: float) -> None:
+        sleeps.append(s)
+
+    return GroqClient("gsk_abc", client=httpx.AsyncClient(transport=handler), sleep=sleep)
+
+
+GROQ_OK = {
+    "choices": [{"message": {"content": '{"ok":true}'}}],
+    "usage": {"prompt_tokens": 50, "completion_tokens": 6},
+}
+
+
+async def test_groq_request_shape_and_parse() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["auth"] = request.headers["authorization"]
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=GROQ_OK)
+
+    reply = await groq(httpx.MockTransport(handler), []).complete("sys", "pause it")
+    assert reply.text == '{"ok":true}' and (reply.input_tokens, reply.output_tokens) == (50, 6)
+    assert reply.system == "groq" and reply.model == "llama-3.3-70b-versatile"
+    assert seen["auth"] == "Bearer gsk_abc" and "gsk_abc" not in str(seen["url"])
+    assert seen["url"] == "https://api.groq.com/openai/v1/chat/completions"
+    body = seen["body"]
+    assert isinstance(body, dict)
+    assert body["messages"] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "pause it"},
+    ]
+    assert body["response_format"] == {"type": "json_object"} and body["temperature"] == 0
+
+
+async def test_groq_backs_off_once_then_hands_over_quickly() -> None:
+    """A backup brain must fail fast: the next provider is waiting."""
+    sleeps: list[float] = []
+    with pytest.raises(LLMError, match="HTTP 429") as err:
+        await groq(httpx.MockTransport(lambda r: httpx.Response(429)), sleeps).complete("s", "u")
+    assert err.value.kind == "rate_limited" and sleeps == [1.0]
+
+
+@pytest.mark.parametrize(
+    ("status", "kind"), [(401, "bad_key"), (403, "bad_key"), (400, "unavailable")]
+)
+async def test_groq_does_not_retry_client_errors(status: int, kind: str) -> None:
+    calls = [0]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls[0] += 1
+        return httpx.Response(status)
+
+    with pytest.raises(LLMError) as err:
+        await groq(httpx.MockTransport(handler), []).complete("s", "u")
+    assert err.value.kind == kind and calls[0] == 1
+
+
+async def test_groq_reply_without_choices_is_an_error() -> None:
+    with pytest.raises(LLMError, match="no choice") as err:
+        await groq(
+            httpx.MockTransport(lambda r: httpx.Response(200, json={"choices": []})), []
+        ).complete("s", "u")
+    assert err.value.kind == "bad_reply"

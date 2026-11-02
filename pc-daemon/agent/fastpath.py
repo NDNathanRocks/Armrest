@@ -63,6 +63,10 @@ def _seek(delta: int) -> IntentPlan:
     return _plan(Intent.MEDIA_CONTROL, [ActionStep(op="seek", args={"delta_s": delta})])
 
 
+def _power(action: str) -> IntentPlan:
+    return _plan(Intent.SYSTEM, [ActionStep(op="power", args={"action": action})])
+
+
 _ORDINALS = {
     "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
     "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
@@ -729,6 +733,31 @@ def _plan_single(utterance: str) -> IntentPlan | None:
         return _plan(Intent.SYSTEM, [ActionStep(op="show_qr")])
     if re.fullmatch(r"(?:sleep|turn off|blank)(?: the)? (?:screen|display|tv)", t):
         return _plan(Intent.SYSTEM, [ActionStep(op="sleep_display")])
+    return _power_phrase(t)
+
+
+# The PC itself, never "the TV" or "the screen" (those blank the display instead).
+_PC = r"(?:the |my |this )?(?:pc|computer|laptop)"
+
+
+def _power_phrase(t: str) -> IntentPlan | None:
+    """Lock / sleep / shut down the PC: only these explicit words, never the AI's guess."""
+    if re.fullmatch(rf"lock(?: up)? (?:{_PC}|(?:the )?windows)|lock (?:the )?screen", t):
+        return _power("lock")
+    if re.fullmatch(rf"(?:put|send) {_PC} to sleep|sleep {_PC}|{_PC} go to sleep", t):
+        return _power("sleep")
+    if re.fullmatch(
+        rf"(?:cancel|stop|abort|undo)(?: the)? (?:shut ?down|power off)(?: of {_PC})?"
+        rf"|(?:don'?t|do not) (?:shut ?down|turn off|power off)(?: {_PC})?",
+        t,
+    ):
+        return _power("cancel_shutdown")
+    if re.fullmatch(
+        rf"(?:shut ?down|turn off|power off|power down|switch off) {_PC}"
+        rf"|(?:shut|turn|power|switch) {_PC} (?:down|off)",
+        t,
+    ):
+        return _power("shutdown")
     return None
 
 
@@ -736,11 +765,15 @@ def plan_button(
     action: QuickAction, args: dict[str, str | int | float | bool] | None = None
 ) -> IntentPlan:
     """Map a Quick Deck button to its single-step plan."""
-    del args  # reserved for parameterized buttons
     if action in ("volume_set", "seek_to"):
         raise ValueError(f"{action} is a slider: the service applies it directly")
     if action == "buy":
         raise ValueError("buy is handled by the service (licensing), never by the agent")
+    if action == "open_url":
+        url = str((args or {}).get("url", ""))
+        return _plan(Intent.NAVIGATE, [ActionStep(op="open_url", args={"url": url})])
+    if action.startswith("pc_"):
+        return _power(action.removeprefix("pc_"))
     table: dict[str, IntentPlan] = {
         "play_pause": _media("play_pause"),
         "next": _media("next"),
