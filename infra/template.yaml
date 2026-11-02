@@ -21,7 +21,7 @@ Parameters:
   MonthlyBudgetUsd:
     Type: Number
     Default: 25
-    Description: Monthly budget. Emails at 80% of actual spend and when the month's forecast passes 100%.
+    Description: Monthly budget. Emails at 80% of actual spend (an alert only; MonthlyMessageCap is the hard cap).
   ThrottleRatePerSecond:
     Type: Number
     Default: 500
@@ -42,8 +42,16 @@ Parameters:
     Default: 5
     Description: New rooms (first PC connects) allowed per source IP per hour. Staging raises it for the load test.
 
+  MonthlyMessageCap:
+    Type: Number
+    Default: 2000000
+    Description: >
+      Hard cost cap. Past this many relay messages + connects in a calendar month the relay switches itself off
+      until the 1st (phones keep working on home Wi-Fi). 2M is about 4 USD even with no free tier. 0 = no cap.
+
 Conditions:
   HasBudgetEmail: !Not [!Equals [!Ref BudgetEmail, ""]]
+  HasSpendCap: !Not [!Equals [!Ref MonthlyMessageCap, 0]]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
 
 Globals:
@@ -326,6 +334,56 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${RelayApi}/*/$default"
 
+  # ------------------------------------------------------------------ Hard monthly cost cap
+  SpendGuardLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: HasSpendCap
+    Properties:
+      RetentionInDays: !Ref LogRetentionDays
+
+  SpendGuardFunction:
+    Type: AWS::Serverless::Function
+    Condition: HasSpendCap
+    Properties:
+      Handler: spend_guard.handler
+      Description: Hourly - switches the relay off for the rest of the month once MonthlyMessageCap is reached
+      Timeout: 30
+      MemorySize: 128
+      LoggingConfig:
+        LogGroup: !Ref SpendGuardLogGroup
+      Environment:
+        Variables:
+          API_ID: !Ref RelayApi
+          STAGE_NAME: !Ref StageName
+          MONTHLY_MESSAGE_CAP: !Ref MonthlyMessageCap
+          NORMAL_RATE: !Ref ThrottleRatePerSecond
+          NORMAL_BURST: !Ref ThrottleBurst
+          RESERVED_CONCURRENCY: !Ref ReservedConcurrency
+          GUARDED_FUNCTIONS: !Sub "${ConnectFunction},${RouterFunction}"
+          ALARM_TOPIC_ARN: !If [HasBudgetEmail, !Ref AlarmTopic, ""]
+      Events:
+        Hourly:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: cloudwatch:GetMetricStatistics
+              Resource: "*"
+            - Effect: Allow
+              Action: [apigateway:GET, apigateway:PATCH]
+              Resource: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${RelayApi}/stages/${StageName}"
+            - Effect: Allow
+              Action: [lambda:PutFunctionConcurrency, lambda:DeleteFunctionConcurrency]
+              Resource: [!GetAtt ConnectFunction.Arn, !GetAtt RouterFunction.Arn]
+            - !If
+              - HasBudgetEmail
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref AlarmTopic
+              - !Ref AWS::NoValue
+
   # ------------------------------------------------------------------ Cost guard and health alarms (optional)
   CostBudget:
     Type: AWS::Budgets::Budget
@@ -347,14 +405,9 @@ Resources:
           Subscribers:
             - SubscriptionType: EMAIL
               Address: !Ref BudgetEmail
-        - Notification:
-            NotificationType: FORECASTED
-            ComparisonOperator: GREATER_THAN
-            Threshold: 100
-            ThresholdType: PERCENTAGE
-          Subscribers:
-            - SubscriptionType: EMAIL
-              Address: !Ref BudgetEmail
+      # Keep this list unchanged: CloudFormation REPLACES the budget when notifications change, and the
+      # replacement fails because the old budget still holds the name. Add extra alerts (such as a
+      # FORECASTED > 100% email) with `aws budgets create-notification` instead.
 
   AlarmTopic:
     Type: AWS::SNS::Topic
