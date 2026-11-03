@@ -862,7 +862,7 @@ This section replaces `docs/HANDOFF.md` as the place to resume from. Sections 12
 | Licensing | 0.x direct builds are a **free preview** (`licensing.is_preview`): no trial, no key. The 14-day trial (`TRIAL_DAYS`) starts on the first run of 1.0 |
 | Phone app | **Cloudflare Pages only**, project `armrest-app`, https://armrest-app.pages.dev. Vercel was removed 2026-10-26. Deploy: `docs/DEVELOPING.md` > *Deploy the phone app*. Redeploy after every UI commit |
 | QR codes | Always `armrest-app.pages.dev`. `brand.qr_base_url` maps old Vercel addresses still in a `config.env` |
-| Relay | AWS account 332130072624, stack `couch-jarvis`, us-east-2, `wss://ltqv0kbaoc.execute-api.us-east-2.amazonaws.com/prod`. **Production still runs the pre-5D relay** (no `room.delete`, no per-IP limits, and it rejects tokens with the `armrest` issuer). The code waiting to deploy = 5D + accept both issuers (user, 2026-10-26: one combined deploy, ask at the change-set step): `sam build`, `sam deploy --no-execute-changeset`, show the user, execute on their OK |
+| Relay | AWS account 332130072624, stack `couch-jarvis`, us-east-2, `wss://ltqv0kbaoc.execute-api.us-east-2.amazonaws.com/prod`. **Deployed 2026-11-03** with 5D, both issuers, pair codes and the `spend_guard` monthly message cap (2M; it switches the relay off until the 1st, a `sam deploy` switches it back on). Deploy flow: `sam build`, `sam deploy --no-execute-changeset` with the live params (memory: deployment facts), show the user, execute on their OK |
 | Docs | `README.md` (public), `docs/COMMANDS.md`, `docs/INSTALL.md` (settings table), `docs/DEVELOPING.md`, legal drafts in `docs/*.md` rendered by `scripts/legal_pages.py` |
 | Checks | `pytest -m ""` 1,079 passed (incl. real Edge + phone e2e; `test_youtube_cc_button_is_toggled_to_the_wanted_state` is flaky, passes on rerun), 209 web tests, ruff, mypy --strict, eslint, tsc: all green |
 
@@ -875,7 +875,7 @@ can't tell), custom keyboard-shortcut favourites, playback speed / exit fullscre
 |---|---|---|
 | 1 | ~~User~~ | ~~Push, tag `v0.4.0`, publish the release~~ Done 2026-10-26 |
 | 2 | User | Test 0.4.0 on the TV with a real phone: tab following, custom shortcuts, speed, exit fullscreen, seek on real sites, touchpad feel |
-| 3 | Me (OK needed) | Deploy the relay: 5D + accept the `armrest` issuer, in one deploy (see 14.1 Relay) |
+| 3 | ~~Me~~ | ~~Deploy the relay: 5D + accept the `armrest` issuer, in one deploy~~ Done 2026-11-03 (with 0.6.0 pair codes + cost cap) |
 | 4 | ~~Me~~ → User | ~~Full rename to Armrest (14.3)~~ Built as **0.5.0** (commits `7bec2f8`, `24f8fe5` and the docs commit). User: push, tag `v0.5.0`, publish `Armrest-Setup.exe` + `Armrest-portable-0.5.0.zip`, then install it on the TV PC and check the move (14.3 *Status*) |
 | 4b | User, then me | Rename the GitHub repo `couch-jarvis` → `armrest`; then I change `RELEASES_API`, `RELEASES_URL`, the README links and `git remote`, and drop them from `test_no_old_name.py`'s allow-list |
 | 4c | Me (OK needed) | **0.6.0** (section 15): built and tested; relay deploy, Cloudflare redeploy and installer build wait for the user |
@@ -1063,8 +1063,13 @@ wake-on-LAN from a browser), so the phone says so before it sleeps the PC.
   fail 1–2 of 26 per run, the same on the committed 0.5.0 code (flaky, not a regression). 243 web tests, ruff,
   mypy --strict, eslint, tsc, contracts, legal pages, licence gate (jsqr Apache-2.0, winrt media MIT): all green.
   The TV overlay with the code was rendered and checked; the landing and code screens at 390 px too.
-- **To do before release (user OK needed):** the combined relay deploy (5D + issuers + pair codes); phone app
-  redeploy to Cloudflare; build the 0.6.0 installer, upgrade test from 0.5.0, then push/tag. Real-device checks:
+- **Done 2026-11-02/03:** the combined relay deploy (5D + issuers + pair codes + `spend_guard` hard cap, commit
+  `b0ac0cb`) is live (stack `UPDATE_COMPLETE` 2026-11-03 ~00:25 UTC; the first try on 2026-11-02 rolled back on the
+  budget replacement, see memory/deploy traps). spend_guard test run: 28,731 messages this month, cap 2,000,000, no
+  action. Budget `couch-jarvis-monthly` now also emails on forecast > 100 %. The new `AlarmTopic` email subscription
+  is *PendingConfirmation* until the user clicks the AWS email. Phone app 0.6.0 redeployed to Cloudflare; 0.6.0
+  installer built and upgrade-tested from published 0.4.0 (0 failures).
+- **To do before release (user OK needed):** push `b0ac0cb`, tag `v0.6.0`, publish the installer. Real-device checks:
   Web Speech in an iPhone home-screen app, scanning the TV QR with an iPhone, Android share menu, Spotify control.
 
 **Watching the TV on the phone (discussion, not built).** A live mirror needs WebRTC from the PC; Netflix, Disney+
