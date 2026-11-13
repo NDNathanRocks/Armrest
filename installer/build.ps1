@@ -163,10 +163,11 @@ function Assert-NoSecrets {
 }
 
 function Assert-NotShipped {
-    # Packages scripts\licenses.py promises are left out (licence terms): fail if PyInstaller kept one.
+    # Packages scripts\licenses.py promises are left out (licence terms), and heavy packages the app
+    # never imports (they only reach a build through the venv's tooling): fail if PyInstaller kept one.
     param([string]$Dir)
     $found = Get-ChildItem -LiteralPath (Join-Path $Dir '_internal') -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match '^(edge_tts|pymsgbox|mouseinfo)([-.]|$)' }
+        Where-Object { $_.Name -match '^(edge_tts|pymsgbox|mouseinfo|litellm|transformers|boto3|botocore|openai|anthropic|tiktoken|torch|magika|headroom)([-.]|$)' }
     if ($found) { throw "Excluded package(s) ended up in the build: $($found.Name -join ', ')" }
 }
 

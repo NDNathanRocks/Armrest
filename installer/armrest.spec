@@ -22,8 +22,17 @@ for package in ("faster_whisper", "ctranslate2", "playwright", "segno", "mss", "
     hiddenimports += h
 hiddenimports += collect_submodules("langgraph") + collect_submodules("uvicorn")
 hiddenimports += ["websockets.asyncio.server", "pycaw.pycaw", "comtypes.client", "qasync"]
-# sentry_sdk imports its default integrations by name at init (opt-in crash reports)
-hiddenimports += collect_submodules("sentry_sdk.integrations")
+# sentry_sdk imports its default integrations by name at init (opt-in crash reports), and tries the
+# "auto-enabling" ones for libraries that are present. Only those are listed: collecting every
+# integration module made PyInstaller follow their imports and bundle whatever happened to sit in
+# the build venv (litellm, transformers, boto3, openai, tiktoken: +60 MB in an early 0.7.0 build).
+hiddenimports += [
+    f"sentry_sdk.integrations.{name}"
+    for name in (
+        "argv", "atexit", "dedupe", "excepthook", "logging", "modules", "stdlib", "threading",
+        "asyncio", "httpx", "fastapi", "starlette",
+    )
+]  # fmt: skip
 # the Store licence check is imported lazily (licensing.query_store)
 hiddenimports += collect_submodules("winrt.windows.services.store") + [
     "winrt.runtime",
@@ -62,6 +71,10 @@ excludes = [
     # GPLv3 helpers pyautogui imports optionally (message boxes, a mouse-position app). It works
     # without them and we use neither; a closed product must not ship GPL code (scripts/licenses.py).
     "pymsgbox", "mouseinfo",
+    # Not used by the app. They reach the build only through the build venv's tooling (and the
+    # sentry integrations that import them); the size gate in build.ps1 fails if they come back.
+    "litellm", "transformers", "boto3", "botocore", "s3transfer", "openai", "anthropic", "tiktoken",
+    "magika", "headroom", "langchain", "torch", "tensorflow", "jax",
 ]  # fmt: skip
 
 a = Analysis(
