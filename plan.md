@@ -858,7 +858,7 @@ This section replaces `docs/HANDOFF.md` as the place to resume from. Sections 12
 ### 14.1 Current state
 | Thing | State |
 |---|---|
-| PC app | **0.4.0 published** (tag `v0.4.0`). **0.5.0 = the Armrest rename (14.3)**: committed, built in `installer\dist` (`Armrest-Setup.exe`), upgrade-tested 33/33 from published 0.4.0 and 33/33 from 0.2.0 (sandboxed data). Not pushed, tagged or released: the user does that (notes: `docs/RELEASE_NOTES_0.5.0.md`) |
+| PC app | **0.4.0 published** (tag `v0.4.0`). 0.5.0 (rename) and 0.6.0 are committed and were built and upgrade-tested; neither is pushed, tagged or released. **0.7.0 = the ship-ready pass (section 16)** on branch `ship-ready`: committed, built in `installer\dist` (see 16.3), not pushed. Notes: `docs/RELEASE_NOTES_0.7.0.md` |
 | Licensing | 0.x direct builds are a **free preview** (`licensing.is_preview`): no trial, no key. The 14-day trial (`TRIAL_DAYS`) starts on the first run of 1.0 |
 | Phone app | **Cloudflare Pages only**, project `armrest-app`, https://armrest-app.pages.dev. Vercel was removed 2026-10-26. Deploy: `docs/DEVELOPING.md` > *Deploy the phone app*. Redeploy after every UI commit |
 | QR codes | Always `armrest-app.pages.dev`. `brand.qr_base_url` maps old Vercel addresses still in a `config.env` |
@@ -878,7 +878,8 @@ can't tell), custom keyboard-shortcut favourites, playback speed / exit fullscre
 | 3 | ~~Me~~ | ~~Deploy the relay: 5D + accept the `armrest` issuer, in one deploy~~ Done 2026-11-03 (with 0.6.0 pair codes + cost cap) |
 | 4 | ~~Me~~ → User | ~~Full rename to Armrest (14.3)~~ Built as **0.5.0** (commits `7bec2f8`, `24f8fe5` and the docs commit). User: push, tag `v0.5.0`, publish `Armrest-Setup.exe` + `Armrest-portable-0.5.0.zip`, then install it on the TV PC and check the move (14.3 *Status*) |
 | 4b | User, then me | Rename the GitHub repo `couch-jarvis` → `armrest`; then I change `RELEASES_API`, `RELEASES_URL`, the README links and `git remote`, and drop them from `test_no_old_name.py`'s allow-list |
-| 4c | Me (OK needed) | **0.6.0** (section 15): built and tested; relay deploy, Cloudflare redeploy and installer build wait for the user |
+| 4c | ~~Me~~ → User | ~~**0.6.0** (section 15): built and tested~~ Relay deployed 2026-11-03; phone app redeployed. User: push, tag `v0.6.0` (or go straight to 0.7.0), publish |
+| 4d | User, then me | **0.7.0 (section 16)**: merge `ship-ready` into `main`, redeploy the phone app to Cloudflare, build `Armrest-Setup.exe` on a PC with Inno Setup, run the upgrade test from the published 0.4.0 (and from 0.6.0 if it was released), tag `v0.7.0`, publish. Real-phone checks listed in 16.4 |
 | 5 | User + me | **Pricing and payments** (14.4) |
 | 6 | Me | 5H leftovers: English + French (`t()` + a test that both dictionaries match), accessibility pass with axe, guest passes that expire after 24 h, "try the remote on this PC" (loopback pairing, for Store reviewers) |
 | 7 | Me | 5J packaging: version 1.0.0, exe version info, MSIX build with the Partner Center identity, MSIX→MSIX update test, Inno→Store migration, WACK, a clean PC in Windows Sandbox. Remove the test certificate `CN=CouchJarvisDev` afterwards (13.10) |
@@ -1076,3 +1077,64 @@ wake-on-LAN from a browser), so the phone says so before it sleeps the PC.
 and Prime show black frames when captured (DRM); away from home Wi-Fi it needs a TURN relay (a running cost); and
 encoding video loads the PC while it plays. A cheap alternative for later: *Continue on phone* for YouTube / YouTube
 Music (open the same video at the same second on the phone and pause the TV).
+
+## 16. v0.7.0: the ship-ready pass (2026-11-13), branch `ship-ready`
+
+Brief (user, 2026-11-13): take over as the engineer who owns the code, get it deploy-ready for the Store, fix what is
+wrong or weak, verify everything, keep the docs current. Plus six concrete requests: YouTube Music not detected when
+that tab is in front; drop the phone's speech engine and keep keyboard dictation; lock-screen media controls if
+possible; unlimited buttons on the Keys tab; remove the Left/Double click buttons and make Scroll hold-to-repeat;
+a bigger trackpad; typing on the Remote tab; the in-app QR scanner does not work.
+
+### 16.1 What changed (commits on `ship-ready`, in order)
+| Commit | Change | Why |
+|---|---|---|
+| `b19fc61` | **Phone:** keyboard dictation only (`useSpeech` lost the Web Speech engine; `record` stays for desktop browsers); `TypeBox` on the Remote tab under the touchpad (KeyPad keeps keys/F-keys/shortcuts); *My buttons* grows to 64 slots (`append`/`dropSlot`, trailing empties dropped on load; the Remote grid stays at `SLOTS` = 8); `MAX_CUSTOM` 24 → 100; touchpad `h-[min(22rem,48vh)]`, Left/Double click gone, `ScrollButton` sends 1 notch per tap and repeats every 140 ms after 350 ms held; scanner uses jsQR only at 960 px, requests 1280×720, `attemptBoth`, decoder loads during the permission prompt | The user's requests. Scanner: Chrome on Android exposes `BarcodeDetector` on phones where it never detects (Play Services module missing); the old code then never fell back to jsQR, so the camera view sat there for ever. This is the most likely cause of "we can't scan"; it needs a real-phone confirmation (16.4) |
+| `68054ba` | **PC:** `JS_SNAPSHOT` reads `ytmusic-player-bar` (play/pause button title → `is_playing`; `#progress-bar` aria values → position/duration); snapshot evaluate capped at 3 s; child frames probed **in parallel** under one 1.5 s deadline (`_frame_video_state`), ad/sign-in frame hosts skipped | Probed on this PC: YouTube Music's `<video>` is 0×0 with `duration = NaN` until a song is well under way, so `pickMedia` scored it as nothing and Now Playing showed nothing / paused for that tab. The serial frame loop (2 s × N ad frames) made every state poll slow on ad-heavy pages |
+| `a205544` | README, privacy policy, `.gitignore` for stray root lock files | Docs follow the code |
+| `0961295` | **Phone:** opt-in **lock-screen controls** (`utils/lockScreen.ts`, `hooks/useLockScreen.ts`, Settings switch): a silent 1 s WAV loop + `navigator.mediaSession` metadata/position from Now Playing; play/pause/next/prev handlers send `cmd.button` | The user's question. iOS Live Activities need a native app; the Media Session API is the only lock-screen surface a web app has. Off by default because the silent track takes audio focus and battery |
+| (this) | Version **0.7.0**, release notes, `CLAUDE.md` corrected (Vercel → Cloudflare, `%APPDATA%\Armrest`, real tree), COMMANDS/INSTALL mic text, this section | Release rules |
+
+### 16.2 Audit findings (what was looked at, what was found)
+Read: all of `pc-daemon/` entry points and trust boundaries (`local_api.py` guard/CORS/host checks, `lan_auth.py`,
+`room.py` DPAPI, `remote_input.py`, `agent/policy.py`, `datafiles.py`, `media_sessions.py`, `watchdog.py`), the relay
+(`connect_handler`, `relay_router`, `common/auth.py`, `common/ddb.py`, `template.yaml`), the phone app (`App.tsx`,
+`roomConnection.ts`, components), the installer scripts and the MSIX manifest, `tests/` layout and the e2e harness.
+
+- **Security:** no findings that block shipping. The relay stamps senders, rejects server-only types from phones,
+  re-checks revocation per command, hashes the room secret and PC key, derives per-room keys from a master in
+  DynamoDB (SSE on, Retain), rate-limits connects / new rooms / code tries per IP, and never logs bodies
+  (`DataTraceEnabled: false`). The LAN API refuses foreign `Origin`/`Host` (DNS rebinding), trusts loopback only for
+  owner actions, and the WebSocket caps frames at 64 KB. LLM output is confined to allow-listed media hosts and fixed
+  JS snippets; guests cannot reach keys, settings or power. Dependency audits: `npm audit --omit=dev` 0, `pip-audit`
+  0 known vulnerabilities (16 moderate/low advisories are in **dev-only** npm tooling, see 16.3).
+- **Data integrity:** atomic writes (`atomic_write_text`), schema version file separate from data, room secrets
+  DPAPI-encrypted, the installer never touches `%APPDATA%` (pinned by `test_release_rules.py`).
+- **Correctness bugs fixed:** YouTube Music state (above); serial frame probing; scanner fallback (above).
+- **Stale docs fixed:** `CLAUDE.md` said "redeploy Vercel" and `%APPDATA%\CouchJarvis` and carried the original
+  (never built) tree; README/COMMANDS/PRIVACY described the removed speech engine.
+- **Repo hygiene:** empty `package-lock.json` and `uv.lock` at the root (tool droppings) are removed and ignored.
+
+### 16.3 Verified, and how
+| Check | Result |
+|---|---|
+| `pytest` (quick: daemon + infra) | 1,149 passed (was 1,146; +3 frame-probe unit tests) |
+| `pytest -m edge tests/integration` | 12 passed incl. the new YouTube Music page test (`test_youtube_music_state_comes_from_the_player_bar`) |
+| `pytest -m e2e` phone suite + new `tests/e2e/test_scanner.py` (fake camera fed a Y4M clip of the TV's QR) + voice path | 21 passed + 2 scanner tests; `test_daemon_restart…` updated for the dictation mic label |
+| `vitest` | 241 passed (was 243: 2 live-speech tests removed, 7 added for scroll-hold, TypeBox placement, growing grid, lock screen) |
+| `tsc --noEmit`, `eslint src`, `ruff check` + `ruff format --check`, `mypy --strict` | all clean |
+| `npm run build` | clean |
+| `npm audit --omit=dev` / `pip-audit -r requirements.txt` | 0 / 0 vulnerabilities. `npm audit` (dev included): 16 moderate/low in build tooling only; not shipped to users |
+| Real Edge probes | YouTube Music tab: `<video>` 0×0, `duration NaN`, `readyState 0` until playing; `/json/list` order follows `bring_to_front`, not background navigation (the tab-following design holds) |
+
+**Not verified here (needs the user's machine or a real phone):** the MSIX build and WACK (no Windows SDK on this PC); the scanner on a real Android
+and iPhone; lock-screen controls on a real phone (Android Chrome reliably; iOS Safari only while the page is awake);
+keyboard dictation inside an iPhone home-screen app; YouTube Music on the signed-in TV profile (the probe profile
+cannot play; the DOM read is covered by the integration test).
+
+### 16.4 Left for the user (in order)
+1. Review the `ship-ready` branch (`git log main..ship-ready`), merge into `main`.
+2. **Phone app:** `cd web-remote; npm ci; $env:VITE_RELAY_WS_URL=<relay>; npm run build; npx wrangler pages deploy dist --project-name armrest-app --branch main`. Then on a real phone: scan the TV QR inside the app (Android and iPhone), toggle *Lock-screen controls* and press play/pause from the lock screen, dictate a command, hold Scroll down, add a ninth button on the Keys tab.
+3. **PC app:** on a PC with Inno Setup 6: `installer\build.ps1`, then `scripts\test_installer_upgrade.ps1 -OldInstaller <0.4.0 or 0.6.0 setup> -OldVersion <that> -NewInstaller installer\dist\Armrest-Setup.exe -Work <fresh folder>`; fill the SHA-256 table in `docs/RELEASE_NOTES_0.7.0.md`; tag `v0.7.0`; publish.
+4. **Store (unchanged from 14.2 #7–9):** Partner Center account and name reservation, identity values into `build_msix.ps1`, `installer\build.ps1 -Channel store` + `build_msix.ps1`, run the Windows App Certification Kit on the MSIX, fill the `[BRACKETED]` items in `docs/STORE_LISTING.md` and the legal pages (support email, publisher name), price (14.4). Policies to re-read at submission: Microsoft Store Policies 7.20 (privacy policy is mandatory for Win32/full-trust apps, 10.5.1; accurate listing, 10.1; testable without accounts, 10.1.x notes for certification; third-party payment allowed for non-game PC apps, 10.8).
+5. Decide (product): whether lock-screen controls should stay opt-in (recommended) and whether 0.6.0 is released on its own or folded into 0.7.0.

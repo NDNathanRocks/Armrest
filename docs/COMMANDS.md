@@ -1,9 +1,9 @@
 # Everything you can say
 
-Tap the mic on the phone and speak: your words appear in the bar and are sent when you stop talking. You can also
-type the same words. Prefer press-and-hold? Switch it under Settings → Microphone. On a phone whose browser can't
-listen, the mic opens the keyboard instead: tap the keyboard's own mic, and the command goes 1.5 seconds after you
-stop.
+Tap the mic on the phone: the keyboard opens. Tap the keyboard's own mic (Siri or Google dictation), speak, and the
+command is sent 1.5 seconds after your words stop. You can also type the same words. On a desktop browser, which has
+no dictation key, the mic records for the PC's speech model instead; Settings → Microphone switches that between tap
+and press-and-hold.
 
 The phrases below are understood on your PC straight away, without the AI helper. You don't need the exact words:
 "hey Armrest, please pause the video" works too. Anything that isn't listed goes to the AI helper (a free Gemini key

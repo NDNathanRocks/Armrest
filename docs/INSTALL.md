@@ -156,7 +156,7 @@ Tap **Log** at the top of the phone app first: it shows what the PC heard and wh
 | The phone says **PC offline** | Armrest isn't running or the PC is asleep. Start it from the Start menu |
 | The phone stays on **Connecting...** | Open the link in Chrome to rule out a Safari quirk; check the PC has internet; look at `daemon.log` for `cloud relay: up` |
 | **"Recording was incomplete"** | Update both the PC app and the cloud relay to the latest version |
-| Voice says it couldn't hear you | The Log shows `heard:`. Allow the mic in the phone browser. First use downloads the model, so wait. Try `ARMREST_STT_DEVICE=cpu` or a Groq key |
+| Voice says it couldn't hear you | On a phone, voice is the keyboard's dictation: check the keyboard's mic works in other apps. From a desktop browser the Log shows `heard:`; first use downloads the model, so wait. Try `ARMREST_STT_DEVICE=cpu` or a Groq key |
 | **"My brain is not set up"** / **"missing its model"** | Run **Set up AI brain** from the Start menu, or add a Gemini key (see *Free-form commands* above) |
 | **"My brain took too long"** | The local model is slow on a CPU. Add a Gemini key, or use a smaller model: `ARMREST_OLLAMA_TEXT_MODEL=qwen2.5:1.5b` (faster, understands less) |
 | It misunderstands a command | The Log shows what it heard. Free-form commands need the AI brain (above) |
