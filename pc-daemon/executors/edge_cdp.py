@@ -1370,7 +1370,9 @@ class EdgeCDP:
             data = await asyncio.wait_for(page.evaluate(JS_SNAPSHOT), SNAPSHOT_TIMEOUT_S)
             if not data["duration_s"]:  # no real player up here: it may be in a child frame
                 inner = await _frame_video_state(page)
-                if inner is not None:
+                # a frame with a real length wins; a lengthless one only fills in a main frame
+                # that has no media at all (an ad frame must not turn "nothing" into "paused")
+                if inner is not None and (inner["duration_s"] or data["is_playing"] is None):
                     data = {**data, **inner}
             tabs = len([p for p in page.context.pages if not p.is_closed()])
             if self._window_fs is not None and not data["is_fullscreen"]:

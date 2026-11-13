@@ -149,7 +149,7 @@ function Scanner({
         return;
       }
       // The decoder loads while the camera permission prompt is up, so neither waits for the other.
-      const decoder = import("jsqr").then((m) => m.default);
+      const decoder = import("jsqr").then((m) => m.default).catch(() => null);
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -169,6 +169,13 @@ function Scanner({
       // first in 0.6.0, but on many Android phones it exists and silently never finds anything (it
       // needs a Google download that may be missing), which left people stuck on this screen.
       const jsQR = await decoder;
+      if (!jsQR) {
+        // the decoder chunk did not load (offline, or the app updated under us): say so instead of
+        // showing a camera view that never finds anything
+        stream.getTracks().forEach((t) => t.stop());
+        setProblem("The scanner could not load. Check your connection and try again, or type the code instead.");
+        return;
+      }
       const tick = () => {
         if (stopped) return;
         const v = video.current;
