@@ -462,6 +462,7 @@ export default function App() {
           voice={view.room.voice}
           adblock={view.room.browser.adblock}
           micMode={micMode}
+          micModeApplies={voice.engine === "record"}
           version={view.room.daemon_version}
           disabled={!connected}
           onCommand={sendCommand}

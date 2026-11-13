@@ -1,7 +1,8 @@
 import type { FormEvent, KeyboardEvent } from "react";
+import type { Modifier } from "../protocol";
 
 interface Props {
-  onKey: (key: string, mods?: never[]) => void;
+  onKey: (key: string, mods?: Modifier[]) => void;
   onText: (text: string) => void;
   disabled: boolean;
   /** Shown under the box: the heading of the section it sits in, when it is not the keypad. */

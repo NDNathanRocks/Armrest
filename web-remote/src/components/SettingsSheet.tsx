@@ -40,6 +40,8 @@ interface Props {
   voice: VoicePrefs;
   adblock: boolean;
   micMode: MicMode;
+  /** False on phones: their mic is the keyboard's dictation, so tap/hold does not apply. */
+  micModeApplies?: boolean;
   /** The connected PC app's version, shown for support. */
   version?: string;
   disabled: boolean;
@@ -127,6 +129,7 @@ export function SettingsSheet({
   voice,
   adblock,
   micMode,
+  micModeApplies = true,
   version,
   disabled,
   onCommand,
@@ -320,6 +323,7 @@ export function SettingsSheet({
           </>
         )}
 
+        {micModeApplies && (
         <section aria-labelledby="mic-h" className="mt-6 space-y-2">
           <h3 id="mic-h" className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
             Microphone
@@ -343,6 +347,7 @@ export function SettingsSheet({
             ))}
           </div>
         </section>
+        )}
 
         {lockScreen && (
           <section aria-labelledby="lock-h" className="mt-6">
