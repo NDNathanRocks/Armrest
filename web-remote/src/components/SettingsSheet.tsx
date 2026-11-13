@@ -59,6 +59,8 @@ interface Props {
   /** Add another TV from inside the app (scan its QR or type its code). */
   onScan?: (params: PairParams) => void;
   onCode?: (code: string) => void;
+  /** Lock-screen player controls (Media Session). Absent: this phone's browser has none. */
+  lockScreen?: { enabled: boolean; choose: (on: boolean) => void };
 }
 
 export type PowerAction = "pc_lock" | "pc_sleep" | "pc_shutdown" | "pc_cancel_shutdown";
@@ -138,6 +140,7 @@ export function SettingsSheet({
   onPower,
   onScan,
   onCode,
+  lockScreen,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [addingTv, setAddingTv] = useState(false);
@@ -340,6 +343,23 @@ export function SettingsSheet({
             ))}
           </div>
         </section>
+
+        {lockScreen && (
+          <section aria-labelledby="lock-h" className="mt-6">
+            <div className="flex items-center gap-3 rounded-2xl bg-surface p-4 ring-1 ring-line">
+              <div className="min-w-0 flex-1">
+                <h3 id="lock-h" className="text-[15px] font-semibold">
+                  Lock-screen controls
+                </h3>
+                <p className="mt-0.5 text-xs text-muted">
+                  Shows what the TV is playing on this phone&apos;s lock screen, with play, pause, next and previous. It plays
+                  silence to get there, which pauses music on this phone and uses more battery.
+                </p>
+              </div>
+              <Switch label="Lock-screen controls" checked={lockScreen.enabled} disabled={disabled} onChange={lockScreen.choose} />
+            </div>
+          </section>
+        )}
 
         <section className="mt-6" aria-label="App">
           <h3 className="mb-2 text-sm font-medium text-zinc-300">App</h3>

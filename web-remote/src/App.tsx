@@ -24,6 +24,7 @@ import { VolumeSlider } from "./components/VolumeSlider";
 import { HomeScreenGuide } from "./components/HomeScreenGuide";
 import { OpenLink } from "./components/OpenLink";
 import { useRoomSocket } from "./hooks/useRoomSocket";
+import { useLockScreen } from "./hooks/useLockScreen";
 import { useSpeech } from "./hooks/useSpeech";
 import { loadMicMode, saveMicMode, type MicMode } from "./hooks/useVoice";
 import { selectDevices } from "./state/roomReducer";
@@ -110,6 +111,11 @@ export default function App() {
     disabled: !connected,
     onRecording: (recording) => actions.sendAudio(recording),
     onProblem: actions.notify,
+  });
+  const lockScreen = useLockScreen({
+    playing: view.room.now_playing,
+    connected,
+    send: (action) => actions.sendButton(action),
   });
   const pairWith = (params: PairParams) => {
     setPairingInApp(true);
@@ -477,6 +483,7 @@ export default function App() {
             setSettingsOpen(false);
             pairWithCode(code);
           }}
+          lockScreen={lockScreen.supported ? { enabled: lockScreen.enabled, choose: lockScreen.choose } : undefined}
           onClose={() => setSettingsOpen(false)}
         />
       )}
