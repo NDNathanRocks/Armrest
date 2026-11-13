@@ -224,3 +224,79 @@ async def test_duplicate_tab_opens_the_same_page_and_shows_it() -> None:
     copy = ctx.pages[1]
     assert copy.visited == ["https://www.youtube.com/watch?v=abc"] and copy.fronted == 1
     assert cdp._page_ref is copy
+
+
+# ---------------------------------------------------------------- child-frame player probing
+
+
+def test_ad_and_sign_in_frames_are_never_probed_for_a_player() -> None:
+    from executors.edge_cdp import _frame_worth_probing
+
+    assert _frame_worth_probing("https://player.vimeo.com/video/1")
+    assert _frame_worth_probing("https://www.youtube-nocookie.com/embed/x")
+    for url in (
+        "about:blank",
+        "https://googleads.g.doubleclick.net/pagead/ads",
+        "https://imasdk.googleapis.com/js/core/bridge.html",
+        "https://accounts.google.com/ServiceLogin",
+        "https://tpc.googlesyndication.com/safeframe/1",
+        "chrome-error://chromewebdata/",
+    ):
+        assert not _frame_worth_probing(url), url
+
+
+async def test_frames_are_probed_together_and_a_stuck_frame_does_not_hold_the_rest() -> None:
+    """Five frames at once must take about one probe, not five; a frame without a script context
+    (an ad frame still loading) times out quietly and the player's frame still answers."""
+    import asyncio
+    import time
+
+    from executors import edge_cdp
+    from executors.edge_cdp import _frame_video_state
+
+    class Frame:
+        def __init__(self, url: str, answer: object, delay: float = 0.0) -> None:
+            self.url, self.answer, self.delay = url, answer, delay
+
+        async def evaluate(self, _js: str) -> object:
+            await asyncio.sleep(self.delay)
+            return self.answer
+
+    class Page:
+        def __init__(self, frames: list[Frame]) -> None:
+            self.frames = frames
+
+    player = {"is_playing": True, "position_s": 12.0, "duration_s": 300.0}
+    page = Page(
+        [
+            Frame("https://site.example/watch", None),  # the main frame is skipped
+            Frame("https://ads.example/a", None, delay=10.0),  # never answers
+            Frame("https://ads.example/b", {"is_playing": False, "position_s": 0, "duration_s": 0}),
+            Frame("https://ads.example/c", None, delay=10.0),
+            Frame("https://player.example/embed", player, delay=0.05),
+            Frame("https://googleads.g.doubleclick.net/x", player),  # skipped: never asked
+        ]
+    )
+    edge_cdp.FRAME_PROBE_TIMEOUT_S = 0.3
+    try:
+        started = time.monotonic()
+        assert await _frame_video_state(page) == player
+        assert time.monotonic() - started < 1.0
+    finally:
+        edge_cdp.FRAME_PROBE_TIMEOUT_S = 1.5
+
+
+async def test_without_a_player_frame_the_snapshot_keeps_the_main_frame_data() -> None:
+    from executors.edge_cdp import _frame_video_state
+
+    class Frame:
+        def __init__(self, url: str) -> None:
+            self.url = url
+
+        async def evaluate(self, _js: str) -> object:
+            return None
+
+    class Page:
+        frames = [Frame("https://site.example/"), Frame("https://other.example/widget")]
+
+    assert await _frame_video_state(Page()) is None

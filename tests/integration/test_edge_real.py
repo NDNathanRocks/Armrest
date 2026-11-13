@@ -46,6 +46,24 @@ window.showAd = showAd;
 </script>"""
 
 
+# YouTube Music plays songs through a hidden 0x0 <video> and shows the state in its player bar:
+# the play/pause button's title says what it will do next, the progress bar carries the time.
+MUSIC_PAGE = b"""<!doctype html><title>Blinding Lights - YouTube Music</title>
+<meta property="og:image" content="https://i.ytimg.com/vi/m/hq.jpg">
+<div id="movie_player" style="width:0;height:0;overflow:hidden">
+  <video id="v" style="width:0;height:0"></video>
+</div>
+<ytmusic-player-bar>
+  <span class="title">Blinding Lights</span>
+  <button id="play-pause-button" title="Play"></button>
+  <div id="progress-bar" role="slider" aria-valuenow="42" aria-valuemax="200"></div>
+</ytmusic-player-bar>
+<script>
+const b = document.getElementById('play-pause-button');
+b.onclick = () => { b.title = b.title === 'Play' ? 'Pause' : 'Play'; };
+</script>"""
+
+
 def silence() -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
@@ -64,6 +82,8 @@ def site() -> Iterator[str]:
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/silence.wav":
                 body, ctype = wav, "audio/wav"
+            elif self.path == "/music":
+                body, ctype = MUSIC_PAGE, "text/html"
             else:
                 body, ctype = PAGE, "text/html"
             rng = self.headers.get("Range")
@@ -211,3 +231,20 @@ async def test_duplicate_then_follow_the_tab_the_user_picks(cdp: EdgeCDP) -> Non
     await asyncio_sleep(0.3)
     assert await cdp._page() is first  # noqa: SLF001
     await copy.close()
+
+
+async def test_youtube_music_state_comes_from_the_player_bar(cdp: EdgeCDP, site: str) -> None:
+    """The hidden <video> on YouTube Music has no size and often no length yet; the player bar
+    says whether a song plays and how far along it is, so Now Playing follows that tab too."""
+    page = await cdp._page()  # noqa: SLF001
+    await page.goto(site + "music")
+    await page.wait_for_selector("ytmusic-player-bar")
+    snap = await cdp.snapshot()
+    assert snap.title == "Blinding Lights"
+    assert snap.is_playing is False
+    assert snap.position_s == pytest.approx(42) and snap.duration_s == pytest.approx(200)
+    assert snap.thumbnail_url == "https://i.ytimg.com/vi/m/hq.jpg"
+    await page.click("#play-pause-button")  # the bar now offers Pause: a song is playing
+    assert (await cdp.snapshot()).is_playing is True
+    await page.goto(site)
+    await page.wait_for_selector("video")

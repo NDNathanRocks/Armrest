@@ -60,17 +60,37 @@ JS_SNAPSHOT = (
   const v = pickMedia();
   const player = document.querySelector('#movie_player');
   const host = location.hostname;
-  const musicTitle = document.querySelector('ytmusic-player-bar .title');
+  const bar = document.querySelector('ytmusic-player-bar');
+  const musicTitle = bar && bar.querySelector('.title');
   const og = document.querySelector('meta[property="og:image"]');
+  let is_playing = v ? (!v.paused && !v.ended) : null;
+  let position_s = v ? v.currentTime : 0;
+  let duration_s = (v && isFinite(v.duration)) ? v.duration : 0;
+  // YouTube Music plays songs through a hidden <video> (0x0, sometimes without a length or with
+  // several copies while it loads). Its player bar is the reliable source: the play/pause button
+  // says what it will do next, and the progress bar carries the song's position and length.
+  if (bar) {
+    const toggle = bar.querySelector('#play-pause-button');
+    const label = toggle ? (toggle.getAttribute('title') || toggle.getAttribute('aria-label') || '') : '';
+    if (/pause/i.test(label)) is_playing = true;
+    else if (/play/i.test(label)) is_playing = false;
+    const progress = bar.querySelector('#progress-bar');
+    const now = progress && parseFloat(progress.getAttribute('aria-valuenow'));
+    const max = progress && parseFloat(progress.getAttribute('aria-valuemax'));
+    if (progress && isFinite(max) && max > 0) {
+      duration_s = max;
+      if (isFinite(now)) position_s = now;
+    }
+  }
   return {
     url: location.href,
     title: (musicTitle ? musicTitle.textContent : document.title).replace(/ - YouTube( Music)?$/, '').trim(),
     host: host,
-    is_playing: v ? (!v.paused && !v.ended) : null,
+    is_playing: is_playing,
     is_fullscreen: !!document.fullscreenElement,
     ad_showing: !!(player && player.classList.contains('ad-showing')),
-    position_s: v ? v.currentTime : 0,
-    duration_s: (v && isFinite(v.duration)) ? v.duration : 0,
+    position_s: position_s,
+    duration_s: duration_s,
     thumbnail_url: og ? og.content : null,
   };
 }"""
@@ -402,6 +422,55 @@ async def _safe_count(locator: Any, *, timeout_s: float = 2.0) -> int:
         return int(await asyncio.wait_for(locator.count(), timeout_s))
     except Exception:
         return 0
+
+
+SNAPSHOT_TIMEOUT_S = 3.0
+FRAME_PROBE_TIMEOUT_S = 1.5
+# Frames that never hold the player: ad and sign-in frames, which often have no script context
+# yet and would make every probe wait out its deadline.
+_SKIP_FRAME_HOSTS = (
+    "doubleclick.net",
+    "googlesyndication.com",
+    "googleadservices.com",
+    "imasdk.googleapis.com",
+    "accounts.google.com",
+    "google-analytics.com",
+    "googletagmanager.com",
+    "facebook.com",
+    "recaptcha.net",
+)
+
+
+def _frame_worth_probing(url: str) -> bool:
+    if not url.startswith(("http://", "https://")):
+        return False
+    host = urlparse(url).hostname or ""
+    return not any(host == h or host.endswith("." + h) for h in _SKIP_FRAME_HOSTS)
+
+
+async def _frame_video_state(page: Any) -> dict[str, Any] | None:
+    """The media state from the child frame that holds the player, or None.
+
+    All frames are asked at once under one deadline: a page with several ad frames used to take
+    seconds per snapshot when each frame was asked in turn and waited out its own timeout.
+    """
+    frames = [f for f in page.frames[1:] if _frame_worth_probing(f.url)]
+    if not frames:
+        return None
+
+    async def probe(frame: Any) -> dict[str, Any] | None:
+        try:
+            value = await asyncio.wait_for(frame.evaluate(JS_VIDEO_STATE), FRAME_PROBE_TIMEOUT_S)
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    results = await asyncio.gather(*(probe(f) for f in frames))
+    found = [r for r in results if r is not None]
+    with_length = [r for r in found if r.get("duration_s")]
+    if with_length:
+        return with_length[0]
+    return found[0] if found else None
 
 
 async def _first_in_frames(
@@ -1298,15 +1367,11 @@ class EdgeCDP:
     async def snapshot(self) -> BrowserSnapshot:
         try:
             page = await self._page()
-            data = await page.evaluate(JS_SNAPSHOT)
+            data = await asyncio.wait_for(page.evaluate(JS_SNAPSHOT), SNAPSHOT_TIMEOUT_S)
             if not data["duration_s"]:  # no real player up here: it may be in a child frame
-                for frame in page.frames[1:]:
-                    with contextlib.suppress(Exception):
-                        inner = await asyncio.wait_for(frame.evaluate(JS_VIDEO_STATE), 2.0)
-                        if inner and (inner["duration_s"] or data["is_playing"] is None):
-                            data = {**data, **inner}
-                            if inner["duration_s"]:
-                                break
+                inner = await _frame_video_state(page)
+                if inner is not None:
+                    data = {**data, **inner}
             tabs = len([p for p in page.context.pages if not p.is_closed()])
             if self._window_fs is not None and not data["is_fullscreen"]:
                 await self._restore_window(page)
