@@ -49,12 +49,14 @@ You need Windows 10 or 11 with Microsoft Edge. A step-by-step guide, including t
 - **Play controls:** previous, play/pause, next, back and forward 10 seconds.
 - **Volume slider** that works like the iPhone's: drag anywhere on the bar and see the exact percentage.
 - **Favourites:** eight buttons that are yours. Choose from fullscreen, exit fullscreen, subtitles, skip ad, duplicate
-  tab, playback speed, screen off and more. You can also **make your own keyboard-shortcut buttons**, such as
-  *Ctrl+Shift+T* "Reopen tab". Long-press any favourite to rearrange them.
+  tab, playback speed, screen off and more. You can also **make your own buttons**: a keyboard shortcut such as
+  *Ctrl+Shift+T* "Reopen tab", or a saved command such as "volume 30 and fullscreen". Long-press any favourite to
+  rearrange them. The **Keys** tab has a second grid, *My buttons*, that grows as you add to it.
 - **Apps row:** one tap opens Netflix, YouTube, Prime Video, Disney+, Spotify, Twitch, Plex or Crunchyroll.
 
 ### Say it or type it
-Tap the mic, speak, and tap send. Or type in the same bar. A few examples:
+Tap the mic: your phone's keyboard opens with its own dictation key. Speak, and the command is sent by itself a moment
+after you stop. Or type in the same bar. A few examples:
 
 | Say | What happens |
 |---|---|
@@ -73,8 +75,10 @@ what's on the screen. The **[full list of commands](docs/COMMANDS.md)** has ever
 
 ### A touchpad and keyboard in your pocket
 - Drag to move the pointer, tap to click, use two fingers to scroll or right-click, and press and hold then drag to
-  select. Choose Slow, Normal or Fast. A slow finger is precise and a quick flick crosses the whole TV.
-- Type on your phone's keyboard straight into the TV, with arrows, Esc, F1-F12 and Ctrl/Alt/Shift shortcuts.
+  select. Choose Slow, Normal or Fast. A slow finger is precise and a quick flick crosses the whole TV. Hold the
+  scroll buttons to keep scrolling slowly.
+- Type on your phone's keyboard straight into the TV from the Remote tab. The Keys tab adds arrows, Esc, F1-F12 and
+  Ctrl/Alt/Shift shortcuts.
 
 ### Share it safely
 - **Owner and guest phones:** guests get playback, volume and voice. Only owners get the touchpad, the keyboard and
@@ -100,7 +104,9 @@ The details are in the [privacy policy](docs/PRIVACY.md).
 - Some streaming sites limit what an automated browser can do. Armrest tells you on the phone when something didn't
   work, and the **Log** button says why.
 - Over the internet, the touchpad has a small delay (usually under a third of a second).
-- The microphone needs the hosted phone app (HTTPS). The backup home-network page can't record audio.
+- Voice uses your phone keyboard's own dictation (Apple's or Google's), so it works on the hosted app and on the
+  backup home-network page alike. A desktop browser has no dictation key and records audio for the PC instead, which
+  needs HTTPS.
 - Windows only, for now.
 
 ## Help

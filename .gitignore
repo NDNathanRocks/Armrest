@@ -25,3 +25,7 @@ installer/THIRD_PARTY_NOTICES.txt
 
 # local tool state (Serena)
 .serena/
+
+# stray lock files written by tools run at the repo root (the real ones live in web-remote/ and the venv)
+/package-lock.json
+/uv.lock

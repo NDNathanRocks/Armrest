@@ -55,7 +55,7 @@ company and handled under its own privacy policy:
 | Service | When | What is sent |
 |---|---|---|
 | Google Gemini | you add a Gemini key | the text of commands, and screenshots of the TV when the app has to find something on the screen |
-| Groq | you add a Groq key | voice recordings, to turn them into text |
+| Groq | you add a Groq key | voice recordings from a desktop browser's mic, to turn them into text (a phone's dictation never reaches the PC as audio) |
 | ElevenLabs | you add an ElevenLabs key | the text of spoken replies |
 | Sentry (crash reports) | you turn on crash reports | the error and where in the app it happened, the app version and Windows version. Names, addresses, IP, keys and what you watch are removed first |
 | GitHub | direct download only, unless you turn it off | a daily check for a newer version (no personal data) |
