@@ -9,7 +9,10 @@ import {
   DEFAULT_FAVORITES,
   DEFAULT_KEY_FAVORITES,
   LIBRARY,
+  MAX_SLOTS,
   SLOTS,
+  append,
+  dropSlot,
   assign,
   blockedReason,
   comboLabel,
@@ -262,11 +265,36 @@ describe("favourites", () => {
     expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ send: { kind: "text", text: "volume 30 and fullscreen" } }));
   });
 
-  it("the Keys tab grid keeps its own 8 slots, with its own defaults", () => {
+  it("the Keys tab grid keeps its own slots, with its own defaults, and grows past eight", () => {
     expect(loadFavorites("keys")).toEqual(DEFAULT_KEY_FAVORITES);
     saveFavorites(["mute", "key_f5"], "keys");
     expect(loadFavorites("keys").slice(0, 3)).toEqual(["mute", "key_f5", null]);
+    expect(loadFavorites("keys")).toHaveLength(SLOTS); // never fewer than the Remote grid
     expect(loadFavorites("remote")).toEqual(DEFAULT_FAVORITES); // the Remote tab is untouched
+    const twelve = [...DEFAULT_KEY_FAVORITES, "mute", "next", "prev", "key_f1"];
+    saveFavorites(twelve, "keys");
+    expect(loadFavorites("keys")).toEqual(twelve);
+    saveFavorites([...twelve, null, null], "keys");
+    expect(loadFavorites("keys")).toEqual(twelve); // trailing empties are not kept
+    expect(loadFavorites("remote")).toHaveLength(SLOTS); // the Remote grid never grows
+    expect(append(twelve, "new_tab")).toEqual([...twelve, "new_tab"]);
+    expect(append(twelve, "mute")).toEqual([...DEFAULT_KEY_FAVORITES, null, "next", "prev", "key_f1", "mute"]); // moved, not doubled
+    expect(dropSlot(twelve, 0)).toEqual(twelve.slice(1));
+    expect(dropSlot(DEFAULT_KEY_FAVORITES, 0)[0]).toBeNull(); // at eight, a slot is emptied instead
+    expect(append(Array.from({ length: MAX_SLOTS }, () => null), "mute")).toHaveLength(MAX_SLOTS);
+  });
+
+  it("My buttons: the add tile appends a slot, Remove takes the slot away", () => {
+    const onChange = vi.fn();
+    const slots = [...DEFAULT_KEY_FAVORITES, "mute"];
+    render(<Favorites title="My buttons" growable daemonVersion="0.6.0" slots={slots} connected keysAllowed onSend={() => undefined} onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument(); // the ninth slot shows
+    fireEvent.click(screen.getByRole("button", { name: "Add a button" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(onChange).toHaveBeenCalledWith([...slots, "next"]);
+    fireEvent.click(screen.getByRole("button", { name: "Change Mute" }));
+    fireEvent.click(screen.getByRole("button", { name: /Remove/ }));
+    expect(onChange).toHaveBeenLastCalledWith([...DEFAULT_KEY_FAVORITES]);
   });
 
   it("reads shortcut buttons saved before saved commands existed", () => {
@@ -481,12 +509,14 @@ describe("the remote page", () => {
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
   });
 
-  it("the Keys tab holds the keyboard, and the trackpad lives on the Remote page", async () => {
+  it("the Remote page has the trackpad and the type box; the Keys tab holds the special keys", async () => {
     await pairedRemote("0.3.0");
     expect(screen.getByTestId("touchpad")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Type on the TV" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Touchpad & keys" }));
     expect(await screen.findByRole("group", { name: "Function keys" })).toBeInTheDocument();
     expect(screen.queryByTestId("touchpad")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Type on the TV" })).not.toBeInTheDocument();
   });
 
   it("Reset app cache is in Settings and asks first", async () => {
@@ -577,6 +607,7 @@ describe("the remote page", () => {
       sock.receive(incoming("state.patch", { rev: 2, devices: [{ ...me, role: "guest" }] }));
     });
     expect(screen.queryByRole("region", { name: "Touchpad" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Type on the TV" })).not.toBeInTheDocument();
     expect(screen.getByText(/This phone is a guest/)).toBeInTheDocument();
   });
 

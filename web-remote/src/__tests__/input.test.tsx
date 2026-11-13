@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { KeyPad, SHORTCUTS } from "../components/KeyPad";
+import { TypeBox } from "../components/TypeBox";
 import { LogPanel, logToText } from "../components/LogPanel";
-import { TouchPad } from "../components/TouchPad";
+import { SCROLL_HOLD_DELAY_MS, SCROLL_REPEAT_MS, TouchPad } from "../components/TouchPad";
 import { initialView, roomReducer, type RoomAction, type RoomView } from "../state/roomReducer";
 import { incoming } from "./helpers";
 
@@ -100,7 +101,7 @@ describe("LogPanel", () => {
 describe("KeyPad", () => {
   it("sends named keys and browser shortcuts (alt+left is Back)", () => {
     const onKey = vi.fn();
-    render(<KeyPad onKey={onKey} onText={vi.fn()} disabled={false} />);
+    render(<KeyPad onKey={onKey} disabled={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Key esc" }));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(onKey.mock.calls).toEqual([
@@ -112,7 +113,7 @@ describe("KeyPad", () => {
 
   it("has F1-F12 and a one-tap F11 full screen", () => {
     const onKey = vi.fn();
-    render(<KeyPad onKey={onKey} onText={vi.fn()} disabled={false} />);
+    render(<KeyPad onKey={onKey} disabled={false} />);
     for (let n = 1; n <= 12; n++) {
       expect(screen.getByRole("button", { name: `Key f${n}` })).toHaveTextContent(`F${n}`);
     }
@@ -126,7 +127,7 @@ describe("KeyPad", () => {
 
   it("modifiers latch for one key, then release", () => {
     const onKey = vi.fn();
-    render(<KeyPad onKey={onKey} onText={vi.fn()} disabled={false} />);
+    render(<KeyPad onKey={onKey} disabled={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Alt" }));
     expect(screen.getByRole("button", { name: "Alt" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Key left" }));
@@ -141,7 +142,7 @@ describe("KeyPad", () => {
   it("typing in the box sends text; Enter and Backspace become keys", async () => {
     const onKey = vi.fn();
     const onText = vi.fn();
-    render(<KeyPad onKey={onKey} onText={onText} disabled={false} />);
+    render(<TypeBox onKey={onKey} onText={onText} disabled={false} />);
     const box = screen.getByRole("textbox", { name: "Type on the TV" });
     await userEvent.click(box);
     await userEvent.keyboard("hi");
@@ -154,14 +155,14 @@ describe("KeyPad", () => {
 
   it("is inert while disconnected", () => {
     const onKey = vi.fn();
-    render(<KeyPad onKey={onKey} onText={vi.fn()} disabled />);
+    render(<KeyPad onKey={onKey} disabled />);
     fireEvent.click(screen.getByRole("button", { name: "Key esc" }));
     expect(onKey).not.toHaveBeenCalled();
   });
 });
 
 describe("TouchPad", () => {
-  it("tapping the pad clicks; the buttons send explicit clicks and scrolls", () => {
+  it("tapping the pad clicks; the buttons send a right click and scroll notches", () => {
     const onPointer = vi.fn();
     render(<TouchPad onPointer={onPointer} disabled={false} />);
     const pad = screen.getByTestId("touchpad");
@@ -169,9 +170,37 @@ describe("TouchPad", () => {
     fireEvent.pointerUp(pad, { pointerId: 1, clientX: 10, clientY: 10 });
     expect(onPointer).toHaveBeenCalledWith({ action: "click" });
     fireEvent.click(screen.getByRole("button", { name: "Right click" }));
-    fireEvent.click(screen.getByRole("button", { name: "Scroll down" }));
     expect(onPointer).toHaveBeenCalledWith({ action: "right_click" });
-    expect(onPointer).toHaveBeenCalledWith({ scroll: 3 });
+    // the plain click buttons are gone: tapping the pad is the click
+    expect(screen.queryByRole("button", { name: /Left click|Double click/ })).toBeNull();
+    const down = screen.getByRole("button", { name: "Scroll down" });
+    fireEvent.pointerDown(down);
+    fireEvent.pointerUp(down);
+    expect(onPointer).toHaveBeenCalledWith({ scroll: 1 });
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Scroll up" }));
+    fireEvent.pointerUp(screen.getByRole("button", { name: "Scroll up" }));
+    expect(onPointer).toHaveBeenCalledWith({ scroll: -1 });
+  });
+
+  it("holding a scroll button keeps scrolling slowly until it is released", () => {
+    vi.useFakeTimers();
+    try {
+      const onPointer = vi.fn();
+      render(<TouchPad onPointer={onPointer} disabled={false} />);
+      const down = screen.getByRole("button", { name: "Scroll down" });
+      fireEvent.pointerDown(down);
+      expect(onPointer).toHaveBeenCalledTimes(1);
+      act(() => void vi.advanceTimersByTime(SCROLL_HOLD_DELAY_MS - 50));
+      expect(onPointer).toHaveBeenCalledTimes(1); // a quick tap is one notch only
+      act(() => void vi.advanceTimersByTime(50 + SCROLL_REPEAT_MS * 3));
+      expect(onPointer).toHaveBeenCalledTimes(5);
+      fireEvent.pointerUp(down);
+      act(() => void vi.advanceTimersByTime(SCROLL_REPEAT_MS * 5));
+      expect(onPointer).toHaveBeenCalledTimes(5); // released: no more notches
+      expect(onPointer.mock.calls.every((c) => c[0].scroll === 1)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("ignores touches while disconnected", () => {

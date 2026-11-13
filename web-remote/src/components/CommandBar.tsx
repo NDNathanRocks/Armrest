@@ -41,7 +41,6 @@ export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
   }, [pending, disabled, text]);
 
   if (voice.active) {
-    const live = voice.engine === "speech";
     return (
       <Dock>
         <div className="rounded-3xl bg-surface p-4 ring-1 ring-rose-400/30" role="group" aria-label="Listening">
@@ -51,20 +50,14 @@ export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
               Listening
             </p>
             <p className="text-xs tabular-nums text-muted">
-              {live ? "Sends when you stop talking" : `${formatElapsed(voice.elapsedMs)} of ${formatElapsed(MAX_RECORDING_MS)}`}
+              {formatElapsed(voice.elapsedMs)} of {formatElapsed(MAX_RECORDING_MS)}
             </p>
           </div>
-          {live && voice.interim ? (
-            <p className="mt-3 min-h-11 text-[17px] leading-snug text-zinc-100" aria-live="polite">
-              {voice.interim}
-            </p>
-          ) : (
-            <div className="mt-3 flex h-11 items-center justify-center gap-1" aria-hidden>
-              {BARS.map((h, i) => (
-                <span key={i} className="w-1 animate-pulse rounded-full bg-rose-400" style={{ height: h, animationDelay: `${i * 90}ms` }} />
-              ))}
-            </div>
-          )}
+          <div className="mt-3 flex h-11 items-center justify-center gap-1" aria-hidden>
+            {BARS.map((h, i) => (
+              <span key={i} className="w-1 animate-pulse rounded-full bg-rose-400" style={{ height: h, animationDelay: `${i * 90}ms` }} />
+            ))}
+          </div>
           {hold ? (
             <p className="mt-3 text-center text-sm text-muted">Release to send</p>
           ) : (
@@ -79,11 +72,11 @@ export function CommandBar({ disabled, voice, micMode, onSend }: Props) {
               <button
                 type="button"
                 onClick={voice.toggle}
-                aria-label={live ? "Send now" : "Send recording"}
+                aria-label="Send recording"
                 className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-rose-400 text-[15px] font-bold text-ink active:bg-rose-300"
               >
-                <Icon name={live ? "send" : "stop"} size={18} />
-                {live ? "Send now" : "Tap to send"}
+                <Icon name="stop" size={18} />
+                Tap to send
               </button>
             </div>
           )}

@@ -107,9 +107,9 @@ function CodeForm({ busy, onCode, onCancel }: { busy: boolean; onCode: (code: st
   );
 }
 
-interface BarcodeDetectorLike {
-  detect(source: CanvasImageSource): Promise<{ rawValue: string }[]>;
-}
+/** Frames are decoded at this width: enough for the TV's QR from the sofa, quick on an old phone. */
+const SCAN_WIDTH = 960;
+const SCAN_EVERY_MS = 150;
 
 /** The pairing link inside a scanned QR, or null for anything else. */
 export function pairParamsFromScan(text: string): PairParams | null {
@@ -148,36 +148,40 @@ function Scanner({
         setProblem("This browser can't use the camera here. Type the code instead.");
         return;
       }
+      // The decoder loads while the camera permission prompt is up, so neither waits for the other.
+      const decoder = import("jsqr").then((m) => m.default);
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
       } catch {
         setProblem("The camera is blocked. Allow it in your browser settings, or type the code instead.");
         return;
       }
-      if (stopped || !video.current) return;
+      if (stopped || !video.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       video.current.srcObject = stream;
       await video.current.play().catch(() => undefined);
-      const Detector = (window as unknown as { BarcodeDetector?: new (o: { formats: string[] }) => BarcodeDetectorLike })
-        .BarcodeDetector;
-      const detector = Detector ? new Detector({ formats: ["qr_code"] }) : null;
-      const jsQR = detector ? null : (await import("jsqr")).default; // iPhone: no BarcodeDetector
-      const tick = async () => {
+      // jsQR runs everywhere, so it is the only decoder. The browser's BarcodeDetector was tried
+      // first in 0.6.0, but on many Android phones it exists and silently never finds anything (it
+      // needs a Google download that may be missing), which left people stuck on this screen.
+      const jsQR = await decoder;
+      const tick = () => {
         if (stopped) return;
         const v = video.current;
         let text: string | null = null;
         if (v && v.readyState >= 2 && v.videoWidth > 0) {
-          if (detector) {
-            text = (await detector.detect(v).catch(() => []))[0]?.rawValue ?? null;
-          } else if (jsQR) {
-            const scale = Math.min(1, 640 / v.videoWidth); // small frames decode fast enough
-            canvas.width = Math.round(v.videoWidth * scale);
-            canvas.height = Math.round(v.videoHeight * scale);
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
-            if (ctx) {
-              ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-              const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              text = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" })?.data ?? null;
-            }
+          const scale = Math.min(1, SCAN_WIDTH / v.videoWidth); // decodes in a few ms at this size
+          canvas.width = Math.round(v.videoWidth * scale);
+          canvas.height = Math.round(v.videoHeight * scale);
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            text = jsQR(img.data, img.width, img.height, { inversionAttempts: "attemptBoth" })?.data ?? null;
           }
         }
         if (text) {
@@ -189,9 +193,9 @@ function Scanner({
           }
           setWrongQr(true);
         }
-        timer = setTimeout(() => void tick(), 200);
+        timer = setTimeout(tick, SCAN_EVERY_MS);
       };
-      void tick();
+      tick();
     };
     void start();
     return () => {

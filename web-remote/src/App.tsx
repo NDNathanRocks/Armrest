@@ -18,6 +18,7 @@ import { Suggestions } from "./components/Suggestions";
 import { TimerList } from "./components/TimerList";
 import { Toasts } from "./components/Toasts";
 import { TouchPad } from "./components/TouchPad";
+import { TypeBox } from "./components/TypeBox";
 import { Transport } from "./components/Transport";
 import { VolumeSlider } from "./components/VolumeSlider";
 import { HomeScreenGuide } from "./components/HomeScreenGuide";
@@ -107,10 +108,6 @@ export default function App() {
   const voice = useSpeech({
     mode: micMode,
     disabled: !connected,
-    onText: (text) => {
-      tap();
-      if (actions.sendText(text)) setRecents(rememberCommand(text));
-    },
     onRecording: (recording) => actions.sendAudio(recording),
     onProblem: actions.notify,
   });
@@ -203,7 +200,7 @@ export default function App() {
     const open = setTimeout(() => {
       // the keyboard's dictation can only be opened by a tap, so it waits for one
       const v = voiceRef.current;
-      if (v.supported && v.engine !== "keyboard" && !v.active) v.toggle();
+      if (v.supported && v.engine === "record" && !v.active) v.toggle();
     }, 1500 + askLength * 70);
     const close = setTimeout(() => {
       if (voiceRef.current.active) voiceRef.current.toggle(); // sends what was said
@@ -411,7 +408,14 @@ export default function App() {
                 )}
                 {hasApps && <AppsRow disabled={!connected} onOpen={sendCommand} />}
                 <Favorites slots={favorites} connected={connected} keysAllowed={inputAllowed} daemonVersion={view.room.daemon_version} onSend={sendFavorite} onChange={changeGrid("remote")} />
-                {inputAllowed ? <TouchPad disabled={!connected} onPointer={(e) => actions.sendPointer(e)} /> : inputOff}
+                {inputAllowed ? (
+                  <>
+                    <TouchPad disabled={!connected} onPointer={(e) => actions.sendPointer(e)} />
+                    <TypeBox title="Keyboard" disabled={!connected} onKey={actions.sendKey} onText={actions.sendTyped} />
+                  </>
+                ) : (
+                  inputOff
+                )}
                 <TimerList timers={view.room.timers} />
                 <FriendsBar devices={selectDevices(view)} selfId={self?.deviceId ?? null} />
               </>
@@ -429,6 +433,7 @@ export default function App() {
                 {/* more buttons of your own: the same choices as Favourites, kept separately */}
                 <Favorites
                   title="My buttons"
+                  growable
                   slots={keyFavorites}
                   connected={connected}
                   keysAllowed={inputAllowed}
@@ -436,7 +441,7 @@ export default function App() {
                   onSend={sendFavorite}
                   onChange={changeGrid("keys")}
                 />
-                {inputAllowed ? <KeyPad disabled={!connected} onKey={actions.sendKey} onText={actions.sendTyped} /> : inputOff}
+                {inputAllowed ? <KeyPad disabled={!connected} onKey={actions.sendKey} /> : inputOff}
               </>
             )}
           </div>

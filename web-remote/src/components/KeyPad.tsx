@@ -1,9 +1,8 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useState } from "react";
 import type { Modifier } from "../protocol";
 
 interface Props {
   onKey: (key: string, mods?: Modifier[]) => void;
-  onText: (text: string) => void;
   disabled: boolean;
 }
 
@@ -67,22 +66,9 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { label: "Full screen (F11)", key: "f11", mods: [] },
 ];
 
-const SENTINEL = "​"; // so Backspace always has something to delete on a phone keyboard
-const NAMED_FROM_KEYBOARD: Record<string, string> = {
-  Enter: "enter",
-  Backspace: "backspace",
-  Delete: "delete",
-  Escape: "esc",
-  Tab: "tab",
-  ArrowLeft: "left",
-  ArrowRight: "right",
-  ArrowUp: "up",
-  ArrowDown: "down",
-};
-
-export function KeyPad({ onKey, onText, disabled }: Props) {
+/** The special keys, F-keys and browser shortcuts. Typing lives in TypeBox, on the Remote tab. */
+export function KeyPad({ onKey, disabled }: Props) {
   const [mods, setMods] = useState<Modifier[]>([]);
-  const box = useRef<HTMLTextAreaElement>(null);
 
   const toggle = (mod: Modifier) =>
     setMods((m) => (m.includes(mod) ? m.filter((x) => x !== mod) : [...m, mod]));
@@ -93,70 +79,11 @@ export function KeyPad({ onKey, onText, disabled }: Props) {
     setMods([]);
   };
 
-  const reset = (el: HTMLTextAreaElement) => {
-    el.value = SENTINEL;
-    el.setSelectionRange?.(SENTINEL.length, SENTINEL.length);
-  };
-
-  const onInput = (e: FormEvent<HTMLTextAreaElement>) => {
-    const ev = e.nativeEvent as InputEvent;
-    const el = e.currentTarget;
-    if (ev.isComposing) return; // predictive keyboards: wait for the finished word
-    switch (ev.inputType) {
-      case "insertText":
-      case "insertFromPaste":
-        if (ev.data) onText(ev.data);
-        else if (el.value.replace(SENTINEL, "")) onText(el.value.replace(SENTINEL, ""));
-        break;
-      case "insertLineBreak":
-      case "insertParagraph":
-        onKey("enter", []);
-        break;
-      case "deleteContentBackward":
-        onKey("backspace", []);
-        break;
-      case "deleteContentForward":
-        onKey("delete", []);
-        break;
-    }
-    reset(el);
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.nativeEvent.isComposing) return;
-    const named = NAMED_FROM_KEYBOARD[e.key];
-    // Backspace/Enter arrive as input events (handled in onInput); the rest never edit the box,
-    // so a hardware keyboard's Esc/Tab/arrows are forwarded here and kept out of the field.
-    if (named && e.key !== "Backspace" && e.key !== "Enter") {
-      e.preventDefault();
-      onKey(named, []);
-    }
-  };
-
   const keyButton =
     "press glass-btn min-h-11 !rounded-xl px-1 text-sm";
 
   return (
     <section aria-label="Keyboard" className="space-y-3">
-      <textarea
-        ref={box}
-        aria-label="Type on the TV"
-        placeholder="Tap here to type on the TV"
-        disabled={disabled}
-        defaultValue={SENTINEL}
-        rows={1}
-        autoCapitalize="off"
-        autoCorrect="off"
-        spellCheck={false}
-        onInput={onInput}
-        onKeyDown={onKeyDown}
-        onCompositionEnd={(e) => {
-          if (e.data) onText(e.data);
-          reset(e.currentTarget);
-        }}
-        className="glass min-h-12 w-full resize-none rounded-2xl px-4 py-3 text-base text-zinc-100 outline-none placeholder:text-zinc-500 focus:ring-2 focus:ring-accent disabled:opacity-40"
-      />
-
       <div role="group" aria-label="Modifiers" className="flex gap-2">
         {MODS.map(({ mod, label }) => (
           <button

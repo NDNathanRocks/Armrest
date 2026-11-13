@@ -4,11 +4,13 @@ import {
   FAV_GROUPS,
   LIBRARY,
   MAX_CUSTOM,
+  MAX_SLOTS,
   MOD_LABEL,
   NAMED_KEYS,
-  SLOTS,
+  append,
   assign,
   blockedReason,
+  dropSlot,
   comboLabel,
   favSupported,
   findFav,
@@ -34,14 +36,21 @@ interface Props {
   onChange: (slots: (string | null)[]) => void;
   /** The heading: "Favourites" on the Remote tab, "My buttons" on the Keys tab. */
   title?: string;
+  /** The grid grows: an add tile follows the last slot and removing a button takes its slot away. */
+  growable?: boolean;
 }
 
 const LONG_PRESS_MS = 550;
 
-/** Two rows of four buttons the user fills from the library. Long-press or Edit rearranges them. */
-export function Favorites({ slots, connected, keysAllowed, daemonVersion, onSend, onChange, title = "Favourites" }: Props) {
+/**
+ * Rows of four buttons the user fills from the library. Long-press or Edit rearranges them. The
+ * Remote tab's grid has eight fixed slots; a growable grid (the Keys tab) takes as many as wanted.
+ */
+export function Favorites({ slots, connected, keysAllowed, daemonVersion, onSend, onChange, title = "Favourites", growable = false }: Props) {
   const [editing, setEditing] = useState(false);
+  // the slot being filled; `slots.length` on a growable grid means "a new slot at the end"
   const [picking, setPicking] = useState<number | null>(null);
+  const adding = growable && picking === slots.length;
   const [custom, setCustom] = useState<CustomButton[]>(loadCustomKeys);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const held = useRef(false);
@@ -85,7 +94,7 @@ export function Favorites({ slots, connected, keysAllowed, daemonVersion, onSend
       </div>
 
       <div className="grid grid-cols-4 gap-2.5">
-        {Array.from({ length: SLOTS }, (_, i) => {
+        {slots.map((_, i) => {
           const fav = findFav(slots[i] ?? null, custom);
           const tile = "glass-btn press relative flex aspect-square flex-col items-center justify-center gap-1.5 rounded-[22px] px-1 text-center text-[11px] font-medium leading-tight";
           if (!fav) {
@@ -134,6 +143,21 @@ export function Favorites({ slots, connected, keysAllowed, daemonVersion, onSend
             </button>
           );
         })}
+        {growable && slots.length < MAX_SLOTS && (
+          <button
+            key="add"
+            type="button"
+            onClick={() => {
+              setEditing(true);
+              setPicking(slots.length);
+            }}
+            aria-label="Add a button"
+            className="glass-btn press relative flex aspect-square flex-col items-center justify-center gap-1.5 rounded-[22px] !bg-transparent px-1 text-center text-[11px] font-medium leading-tight text-accent ring-1 !ring-dashed ring-accent/50"
+          >
+            <Icon name="plus" size={20} />
+            Add
+          </button>
+        )}
       </div>
 
       {picking !== null && (
@@ -144,12 +168,13 @@ export function Favorites({ slots, connected, keysAllowed, daemonVersion, onSend
           daemonVersion={daemonVersion}
           keysAllowed={keysAllowed}
           onPick={(id) => {
-            onChange(assign(slots, picking, id));
+            if (id === null) onChange(growable ? dropSlot(slots, picking) : assign(slots, picking, null));
+            else onChange(adding ? append(slots, id) : assign(slots, picking, id));
             setPicking(null);
           }}
           onCreate={(made) => {
             changeCustom([...custom, made]);
-            onChange(assign(slots, picking, made.id));
+            onChange(adding ? append(slots, made.id) : assign(slots, picking, made.id));
             setPicking(null);
           }}
           onDelete={(id) => {

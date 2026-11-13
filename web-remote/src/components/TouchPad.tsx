@@ -13,6 +13,10 @@ export const PAD_SPEEDS = { slow: 1.1, normal: 1.6, fast: 2.4 } as const;
 export type PadSpeed = keyof typeof PAD_SPEEDS;
 const SPEED_KEY = "cj.touchpad.speed";
 
+/** Scroll buttons: one notch on the tap, then while held, one notch every REPEAT_MS after a pause. */
+export const SCROLL_HOLD_DELAY_MS = 350;
+export const SCROLL_REPEAT_MS = 140;
+
 export function loadPadSpeed(): PadSpeed {
   try {
     const saved = localStorage.getItem(SPEED_KEY);
@@ -55,9 +59,7 @@ export function TouchPad({ onPointer, disabled }: Props) {
     tap(8);
     onPointer({ action });
   };
-  const scroll = (notches: number) => () => onPointer({ scroll: notches });
-  const button =
-    "press glass-btn min-h-12 flex-1 !rounded-2xl text-sm font-medium";
+  const button = "press glass-btn min-h-12 flex-1 !rounded-2xl text-sm font-medium";
 
   return (
     <section aria-label="Touchpad" className="space-y-2.5">
@@ -85,7 +87,7 @@ export function TouchPad({ onPointer, disabled }: Props) {
         role="application"
         aria-label="Touchpad area: drag to move the cursor, tap to click, two fingers to scroll"
         data-testid="touchpad"
-        className={`glass relative h-56 touch-none select-none rounded-[28px] ${disabled ? "opacity-40" : ""}`}
+        className={`glass relative h-[min(22rem,48vh)] min-h-56 touch-none select-none rounded-[28px] ${disabled ? "opacity-40" : ""}`}
         onPointerDown={(e) => {
           if (disabled) return;
           e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -101,24 +103,71 @@ export function TouchPad({ onPointer, disabled }: Props) {
         </p>
       </div>
       <div className="flex gap-3">
-        <button type="button" disabled={disabled} onClick={click("click")} className={button}>
-          Left click
-        </button>
-        <button type="button" disabled={disabled} onClick={click("double_click")} className={button}>
-          Double click
-        </button>
+        <ScrollButton direction={-1} disabled={disabled} onPointer={onPointer} className={button} />
+        <ScrollButton direction={1} disabled={disabled} onPointer={onPointer} className={button} />
         <button type="button" disabled={disabled} onClick={click("right_click")} className={button}>
           Right click
         </button>
       </div>
-      <div className="flex gap-3">
-        <button type="button" disabled={disabled} onClick={scroll(-3)} className={button} aria-label="Scroll up">
-          ▲ Scroll up
-        </button>
-        <button type="button" disabled={disabled} onClick={scroll(3)} className={button} aria-label="Scroll down">
-          ▼ Scroll down
-        </button>
-      </div>
     </section>
+  );
+}
+
+/**
+ * Scroll up / down. A tap scrolls one notch; holding the button keeps scrolling slowly, so a long
+ * page can be read without tapping a hundred times. Timers stop on release, leave or cancel.
+ */
+function ScrollButton({
+  direction,
+  disabled,
+  onPointer,
+  className,
+}: {
+  direction: -1 | 1;
+  disabled: boolean;
+  onPointer: (e: PointerEmit) => void;
+  className: string;
+}) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef(onPointer);
+  useEffect(() => {
+    latest.current = onPointer;
+  });
+  const stop = () => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  useEffect(() => stop, []);
+  const start = () => {
+    if (disabled) return;
+    stop();
+    latest.current({ scroll: direction });
+    const repeat = () => {
+      latest.current({ scroll: direction });
+      timer.current = setTimeout(repeat, SCROLL_REPEAT_MS);
+    };
+    timer.current = setTimeout(repeat, SCROLL_HOLD_DELAY_MS);
+  };
+  const label = direction < 0 ? "Scroll up" : "Scroll down";
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label={label}
+      title="Hold to keep scrolling"
+      onPointerDown={start}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onKeyDown={(e) => {
+        if ((e.key === "Enter" || e.key === " ") && !e.repeat) start();
+      }}
+      onKeyUp={stop}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none" }}
+      className={className}
+    >
+      {direction < 0 ? "▲ Scroll up" : "▼ Scroll down"}
+    </button>
   );
 }

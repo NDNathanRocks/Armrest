@@ -229,7 +229,6 @@ describe("CommandBar", () => {
     engine: "record",
     supported: true,
     active: false,
-    interim: "",
     elapsedMs: 0,
     armed: false,
     toggle: vi.fn(),
@@ -239,17 +238,6 @@ describe("CommandBar", () => {
     arm: vi.fn(),
     disarm: vi.fn(),
     ...over,
-  });
-
-  it("the phone's speech engine shows the words live and can send early", async () => {
-    const { CommandBar } = await import("../components/CommandBar");
-    const v = voice({ engine: "speech", active: true, interim: "play lofi on" });
-    render(<CommandBar disabled={false} voice={v} micMode="tap" onSend={vi.fn()} />);
-    const panel = screen.getByRole("group", { name: "Listening" });
-    expect(panel).toHaveTextContent("play lofi on");
-    expect(panel).toHaveTextContent(/Sends when you stop talking/);
-    fireEvent.click(screen.getByRole("button", { name: "Send now" }));
-    expect(v.toggle).toHaveBeenCalledTimes(1);
   });
 
   it("keyboard dictation: the mic opens the keyboard and the words go by themselves", async () => {

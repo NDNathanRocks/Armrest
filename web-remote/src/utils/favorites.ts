@@ -133,7 +133,7 @@ export type CustomButton = CustomKey | CustomSay;
 const MAX_SAY = 200;
 
 const CUSTOM_KEY = "cj.favorites.custom.v1";
-export const MAX_CUSTOM = 24;
+export const MAX_CUSTOM = 100;
 const MODS: readonly Modifier[] = ["ctrl", "alt", "shift"];
 export const MOD_LABEL: Record<Modifier, string> = { ctrl: "Ctrl", alt: "Alt", shift: "Shift" };
 
@@ -250,13 +250,22 @@ export const DEFAULT_KEY_FAVORITES: readonly (string | null)[] = [
 ];
 const DEFAULTS: Record<Grid, readonly (string | null)[]> = { remote: DEFAULT_FAVORITES, keys: DEFAULT_KEY_FAVORITES };
 
-/** The saved slots, always exactly SLOTS long. Anything unreadable falls back to the defaults. */
+/** The Remote tab's grid is always SLOTS long; the Keys tab's "My buttons" grows as you add. */
+export const MAX_SLOTS = 64;
+export const gridCapacity = (grid: Grid): number => (grid === "keys" ? MAX_SLOTS : SLOTS);
+export const gridGrows = (grid: Grid): boolean => grid === "keys";
+
+/**
+ * The saved slots: exactly SLOTS for the Remote grid; at least SLOTS and at most MAX_SLOTS for a
+ * growing grid, with the trailing empties dropped. Anything unreadable falls back to the defaults.
+ */
 export function loadFavorites(grid: Grid = "remote"): (string | null)[] {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEYS[grid]) ?? "null");
     if (Array.isArray(raw)) {
       const mine = new Set(loadCustomKeys().map((c) => c.id));
-      const slots = raw.slice(0, SLOTS).map((v) => (typeof v === "string" && (byId.has(v) || mine.has(v)) ? v : null));
+      const slots = raw.slice(0, gridCapacity(grid)).map((v) => (typeof v === "string" && (byId.has(v) || mine.has(v)) ? v : null));
+      if (gridGrows(grid)) while (slots.length > SLOTS && slots.at(-1) === null) slots.pop();
       while (slots.length < SLOTS) slots.push(null);
       return slots;
     }
@@ -268,7 +277,7 @@ export function loadFavorites(grid: Grid = "remote"): (string | null)[] {
 
 export function saveFavorites(slots: readonly (string | null)[], grid: Grid = "remote"): void {
   try {
-    localStorage.setItem(STORAGE_KEYS[grid], JSON.stringify(slots.slice(0, SLOTS)));
+    localStorage.setItem(STORAGE_KEYS[grid], JSON.stringify(slots.slice(0, gridCapacity(grid))));
   } catch {
     /* private mode: the choice lasts until the page closes */
   }
@@ -279,4 +288,17 @@ export function assign(slots: readonly (string | null)[], index: number, id: str
   const next = slots.map((s) => (id !== null && s === id ? null : s));
   next[index] = id;
   return next;
+}
+
+/** A growing grid: a new slot at the end (up to MAX_SLOTS), holding `id`. */
+export function append(slots: readonly (string | null)[], id: string): (string | null)[] {
+  const next = slots.map((s) => (s === id ? null : s));
+  if (next.length >= MAX_SLOTS) return assign(next, next.length - 1, id);
+  return [...next, id];
+}
+
+/** A growing grid: slot `index` taken out (the grid never shrinks below SLOTS). */
+export function dropSlot(slots: readonly (string | null)[], index: number): (string | null)[] {
+  if (slots.length <= SLOTS) return assign(slots, index, null);
+  return slots.filter((_, i) => i !== index);
 }

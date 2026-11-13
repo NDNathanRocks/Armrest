@@ -108,7 +108,10 @@ def test_daemon_restart_reconnects_without_reload_and_controls_gate_correctly(
     wait_badge(page, "Reconnecting", timeout=20_000)
     play = page.get_by_role("button", name="Play / Pause")
     expect(play).to_be_disabled()
-    expect(page.get_by_role("button", name="Tap to talk")).to_be_disabled()
+    # a phone's mic is its keyboard's dictation; a desktop browser's mic records
+    expect(
+        page.get_by_role("button", name=re.compile("Dictate with the keyboard|Tap to talk"))
+    ).to_be_disabled()
     # the rest of the UI is alive while offline: typing works, forget-this-phone is reachable
     page.get_by_label("Type a command").fill("still responsive")
     daemon.start()
