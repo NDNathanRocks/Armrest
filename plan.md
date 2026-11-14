@@ -1124,6 +1124,8 @@ Read: all of `pc-daemon/` entry points and trust boundaries (`local_api.py` guar
 | `vitest` | 241 passed (was 243: 2 live-speech tests removed, 7 added for scroll-hold, TypeBox placement, growing grid, lock screen) |
 | `tsc --noEmit`, `eslint src`, `ruff check` + `ruff format --check`, `mypy --strict` | all clean |
 | `npm run build` | clean |
+| `installeruild.ps1` (0.7.0) | `Armrest-Setup.exe` 139 MB (the first 0.7.0 build was 212 MB: Sentry integration collection dragged litellm/transformers/boto3/openai/tiktoken out of the build venv; fixed in the spec + a build gate), portable zip 203 MB; secret scan clean |
+| `scripts	est_installer_upgrade.ps1` 0.4.0 → 0.7.0 (sandboxed `%LOCALAPPDATA%\cjt070`) | **33/33 PASS**: in-place update, data move, sign-ins kept, startup entry renamed, uninstall keeps settings, real `room.json` hash `36F07BF8` untouched, no real `Armrest` folder created |
 | `npm audit --omit=dev` / `pip-audit -r requirements.txt` | 0 / 0 vulnerabilities. `npm audit` (dev included): 16 moderate/low in build tooling only; not shipped to users |
 | Real Edge probes | YouTube Music tab: `<video>` 0×0, `duration NaN`, `readyState 0` until playing; `/json/list` order follows `bring_to_front`, not background navigation (the tab-following design holds) |
 

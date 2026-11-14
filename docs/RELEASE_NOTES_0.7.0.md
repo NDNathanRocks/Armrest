@@ -23,6 +23,8 @@ in-app QR scanner works on phones where it got stuck, and the phone can show the
   that never finds anything; the scanner now uses its own decoder everywhere, at a higher resolution.
 
 ## Fixed on the PC
+- **A smaller installer.** Packages the app never uses (AI client libraries from the build machine) were being
+  bundled; the installer is 139 MB, down from 154 MB in 0.6.0.
 - **YouTube Music is detected.** Now Playing, the seek bar and play / pause follow a YouTube Music tab: its hidden
   player reports no size and often no length, so the state now comes from the player bar.
 - **Faster state updates on pages with ads.** Child frames are checked together with one short deadline instead of
@@ -36,8 +38,8 @@ in-app QR scanner works on phones where it got stuck, and the phone can show the
 ## Files
 | File | SHA-256 |
 |---|---|
-| `Armrest-Setup.exe` (recommended) | *(filled in when the release is built)* |
-| `Armrest-portable-0.7.0.zip` | *(filled in when the release is built)* |
+| `Armrest-Setup.exe` (recommended) | `6F56C72FB522622C9CE8A899F9730B3EE8C342DA832D04E001A21854C0C29814` |
+| `Armrest-portable-0.7.0.zip` | `B979C154524EB2117507DA6B634708E5640E2C0B5576FAC75848E6D04959008F` |
 
 ## Checked before release
 See plan.md section 16 *Status* for the test results.
