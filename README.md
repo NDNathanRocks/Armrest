@@ -10,6 +10,8 @@ If your laptop or PC is plugged into the TV, you know the routine: get up, find 
 sit back down. Armrest fixes that. Scan a QR code on the TV once and your phone becomes a remote: say *"play lofi on
 YouTube"*, drag the volume slider, skip the intro, or use your phone as a touchpad and keyboard.
 
+**[Watch the 20-second demo](docs/media/armrest-demo.mp4)**
+
 - **No accounts, no app store install, no Wi-Fi settings.** Scan the code and you're in. It works on any phone with a
   browser and keeps working when you lock it.
 - **Everyone on the couch gets a remote.** Friends scan the same code. Everyone sees what's playing, and button

@@ -29,3 +29,6 @@ installer/THIRD_PARTY_NOTICES.txt
 # stray lock files written by tools run at the repo root (the real ones live in web-remote/ and the venv)
 /package-lock.json
 /uv.lock
+
+# brag/launch-video working files (the published video lives in docs/media/)
+/brag-output/
