@@ -124,7 +124,9 @@ traffic. Measured cost and load numbers are in `plan.md` section 13.2.
 ## Deploy the phone app
 
 The phone app is hosted on **Cloudflare Pages**, project `armrest-app`, at https://armrest-app.pages.dev (free,
-commercial use allowed). Log in once with `npx wrangler login`, then:
+commercial use allowed). Log in once with `npx wrangler login`, then run
+`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy_web.ps1` (it refuses uncommitted changes under
+`web-remote/`, builds against the production relay and tags the deploy with the commit). By hand it is:
 
 ```powershell
 cd web-remote
